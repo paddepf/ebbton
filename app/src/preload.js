@@ -116,6 +116,9 @@ contextBridge.exposeInMainWorld('api', {
   /** Meldet dem Hauptprozess, ob der Audioeingang ausgefallen ist. */
   reportInputLost: (lost) => ipcRenderer.send('health:input', { lost }),
 
+  /** Schreibt einen Eintrag in `logs/eingang.log` (Ereignis + Daten, siehe `inputlog.js`). */
+  logInput: (level, event, data) => ipcRenderer.send('log:input', { level, event, data }),
+
   exportBatch: (items) => invoke('export:batch', { items }),
   exportTarget: () => invoke('export:target'),
   exportPreviewName: (pattern) => invoke('export:previewName', { pattern }),

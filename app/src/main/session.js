@@ -15,6 +15,7 @@ const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
 const MIN_SECTION = SectionLogic.MIN_SECTION;
 const MIN_CUT = 0.2;       // kürzester Schnitt in Sekunden
+const MAX_GAP_FILL_SECONDS = 300;   // so viel Stille füllt `fillGap` höchstens je Aussetzer ein (Speicher/Schreib-Thread)
 const UNDO_LIMIT = 60;     // so viele Schritte lassen sich zurücknehmen
 
 let counter = 0;
@@ -114,6 +115,7 @@ class Session extends EventEmitter {
     this._bucketFrames = 0;
     this._clipUntil = 0;
     this._restoredDuration = 0;
+    this.gaps = [];                     // mit Stille gefüllte Aussetzer des Eingangs: {at (s), seconds}
     this._dirty = false;
   }
 
@@ -718,6 +720,7 @@ class Session extends EventEmitter {
     this.finalized = false;
     this._cueKey = null;
     this.peaks = [];
+    this.gaps = [];
     this._startLoudness(rate, ch, 0);
     this._restoredDuration = 0;
     this._bucketAcc = 0;
@@ -1031,6 +1034,27 @@ class Session extends EventEmitter {
   }
 
   /**
+   * Füllt einen Aussetzer des Eingangs mit Stille, damit die Zeitachse zur Uhr passt: Sonst fehlen die Sekunden
+   * einfach, Abschnitte hinter der Lücke liegen zu früh und beim Abhören springt die Aufnahme. Läuft über
+   * `pushAudio` (Wellenform, Lautheit und Dauer wachsen mit) in Blöcken zu 0,5 s.
+   * @returns {number} eingefügte Sekunden (0, wenn nicht aufgenommen wird oder Mehrspur)
+   */
+  fillGap(seconds) {
+    if (this.status !== 'recording' || !this.writer || this.mode === 'multitrack') return 0;
+    const total = Math.min(Math.round(seconds * this.sampleRate), Math.round(MAX_GAP_FILL_SECONDS * this.sampleRate));
+    if (!(total > 0)) return 0;
+    const at = this.duration;
+    const block = Math.round(this.sampleRate / 2);
+    for (let done = 0; done < total; done += block) {
+      this.pushAudio(Buffer.alloc(Math.min(block, total - done) * this.channels * 2));
+    }
+    const filled = Math.round((total / this.sampleRate) * 10) / 10;
+    this.gaps.push({ at: Math.round(at * 10) / 10, seconds: filled });
+    this._scheduleSave();
+    return filled;
+  }
+
+  /**
    * Mehrspur: Pegel aus dem Mehrspur-Prozess (statt `pushAudio`). Der Pegel der Session ist der lauteste
    * aufgenommene Kanal; die Wellenform wächst um die mitgelieferten Spitzenwerte (`buckets`, je 50 ms).
    */
@@ -1104,6 +1128,7 @@ class Session extends EventEmitter {
       sections: this.sections,
       exports: this.exports,
       cuts: this.cuts,
+      gaps: this.gaps,
       peaks: this.peaks,
       loudness: this.mode === 'multitrack' ? undefined : this.loudness
     };
@@ -1136,6 +1161,7 @@ class Session extends EventEmitter {
     this.service = data.service || this.service;
     this.agendaOrigin = data.agendaOrigin || null;
     this.peaks = data.peaks || [];
+    this.gaps = Array.isArray(data.gaps) ? data.gaps : [];
     this.loudness = Array.isArray(data.loudness) ? data.loudness : [];
     this._loudCurve = new Loudness.Curve(this.loudness);
     this.sampleRate = data.sampleRate || this.sampleRate;

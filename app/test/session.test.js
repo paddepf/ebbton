@@ -164,6 +164,37 @@ test('Fortsetzen hängt an dieselbe Datei an', () => withSession(async (s) => {
   assert.equal(readInfo(s.wavPath).duration, 5);
 }));
 
+test('Aussetzer des Eingangs: Lücke wird mit Stille gefüllt, Dauer und Datei stimmen, Vermerk in der Session', () => withSession(async (s) => {
+  s.start({ sampleRate: 48000, channels: 2 });
+  s.pushAudio(silence(3));
+  assert.equal(s.fillGap(4.3), 4.3);
+  s.pushAudio(silence(2));
+  assert.equal(s.duration, 9.3);
+  assert.deepEqual(s.gaps, [{ at: 3, seconds: 4.3 }]);
+  assert.equal(s.peaks.length, Math.round(9.3 * 1000 / 50));   // Wellenform wächst um die Lücke mit
+  s.stop();
+  await s.whenWritten();
+  const { readInfo } = require(src('main/wav'));
+  assert.equal(readInfo(s.wavPath).duration, 9.3);
+  const saved = JSON.parse(fs.readFileSync(s.sessionFilePath(), 'utf8'));
+  assert.deepEqual(saved.gaps, [{ at: 3, seconds: 4.3 }]);
+  // Beim Laden bleibt der Vermerk erhalten.
+  s.loadFromFile(s.sessionFilePath());
+  assert.deepEqual(s.gaps, [{ at: 3, seconds: 4.3 }]);
+}));
+
+test('Lücken füllen: nur während der Aufnahme, nie ohne Dauer, höchstens fünf Minuten je Aussetzer', () => withSession(async (s) => {
+  assert.equal(s.fillGap(2), 0);                       // vor dem Start
+  s.start({ sampleRate: 8000, channels: 2 });
+  assert.equal(s.fillGap(0), 0);
+  assert.equal(s.fillGap(-1), 0);
+  assert.equal(s.fillGap(100000), 300);                // gedeckelt
+  assert.equal(s.duration, 300);
+  s.stop();
+  await s.whenWritten();
+  assert.equal(s.fillGap(2), 0);                       // nach dem Beenden
+}));
+
 test('Punkt vor dem Start hineingezogen läuft ab 0:00 offen mit', () => withSession(async (s) => {
   s.setAgenda([{ id: null, title: 'A' }, { id: null, title: 'B' }], 'plan');
   const a = s.sections.find((x) => x.label === 'A');

@@ -1052,6 +1052,34 @@
   const WATCHDOG_MS = 2500;      // so lange darf der Eingang schweigen, bevor neu verbunden wird
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  /** Eintrag ins Eingangsprotokoll (`logs/eingang.log`); fehlerhaft oder ohne Hauptprozess schadet es nie. */
+  function logInput(level, event, data) {
+    try { window.api.logInput(level, event, data || {}); } catch { /* nur Hilfe */ }
+  }
+
+  /** Zustand zum Zeitpunkt eines Aussetzers: Eingang, Fenster, Rechner – damit sich die Ursache eingrenzen lässt. */
+  function inputSnapshot() {
+    return {
+      ...capture.diagnostics(),
+      sichtbar: document.visibilityState,
+      fokus: document.hasFocus(),
+      online: navigator.onLine,
+      speicherMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null,
+      sitzung: state.session?.status || null
+    };
+  }
+
+  capture.onEvent = (event, data) => logInput(event === 'eingang-geoeffnet' ? 'info' : 'warn', event, data);
+
+  // Gerät eingesteckt/entfernt oder Standardgerät gewechselt (der Eingang steht auf „Systemstandard“).
+  if (navigator.mediaDevices) {
+    navigator.mediaDevices.addEventListener('devicechange', async () => {
+      let eingaenge = null;
+      try { eingaenge = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput').map((d) => d.label || d.deviceId.slice(0, 8)); } catch { /* nur Hilfe */ }
+      logInput('warn', 'geraete-geaendert', { eingaenge, ...inputSnapshot() });
+    });
+  }
+
   function showAudioWarning(on, text, kind = 'lost') {
     const el = $('audio-warning');
     el.hidden = !on;
@@ -1091,6 +1119,8 @@
     state.recovering = true;
     window.api.reportInputLost(true);
     const lostSince = state.lastChunkAt;
+    // Wichtigster Eintrag: wie lange schon nichts kam und in welchem Zustand Eingang und Fenster sind.
+    logInput('error', 'wiederverbinden-start', { keineBloeckeSeitMs: lostSince ? Date.now() - lostSince : null, ...inputSnapshot() });
     showAudioWarning(true, 'Kein Audiosignal – der Eingang wird neu verbunden …', 'lost');
     if (!opts.quiet) toast('error', 'Der Audioeingang liefert keine Daten mehr – er wird neu verbunden.', 8000);
     try {
@@ -1110,11 +1140,25 @@
           if (!isLive()) { await capture.stop(); return; }
           if (state.chunkSeq > before) {
             const lost = Math.round((Date.now() - lostSince) / 1000);
-            toast('success', `Audioeingang wieder verbunden. Etwa ${lost} s fehlen in der Aufnahme.`, 10000);
+            logInput('warn', 'wiederverbunden', { fehlenSekunden: lost, ...inputSnapshot() });
+            // Der Hauptprozess hat die Lücke mit Stille gefüllt: Wellenform und Lautheit von dort holen, sonst
+            // wäre die lokal mitgerechnete Wellenform um die Lücke zu kurz.
+            try {
+              const full = await window.api.session.state();
+              if (full.ok) {
+                state.peaks = full.peaks || [];
+                wave.peaks = state.peaks;
+                setLoudness(full.loudness);
+                state.bucketAcc = 0;
+                state.bucketFrames = 0;
+              }
+            } catch (err) { console.warn('Wellenform nach der Lücke nicht abgeglichen:', err); }
+            toast('success', `Audioeingang wieder verbunden. Etwa ${lost} s fehlen – an der Stelle ist Stille.`, 10000);
             return;
           }
         } catch (err) {
           console.warn('Eingang neu verbinden fehlgeschlagen:', err);
+          logInput('error', 'wiederverbinden-fehlgeschlagen', { fehler: String(err && err.message || err) });
         }
         await sleep(2000);
       }
@@ -1126,7 +1170,15 @@
     }
   }
 
+  let lastWatchTick = performance.now();
   setInterval(() => {
+    // Bleibt der Takt der Oberfläche aus (Fenster gedrosselt, Hauptthread blockiert), liefert auch die Erfassung
+    // verspätet: dann ist nicht das Gerät schuld, sondern die Oberfläche bzw. der Rechner.
+    const nowPerf = performance.now();
+    const lag = nowPerf - lastWatchTick - 1000;
+    lastWatchTick = nowPerf;
+    if (lag > 1000 && state.session?.status === 'recording') logInput('warn', 'oberflaeche-haengt', { verzugMs: Math.round(lag), ...inputSnapshot() });
+
     if (state.session?.status !== 'recording' || state.starting || state.recovering || isMultitrack()) return;
     // Erfassung läuft nicht (z. B. nach Neuladen der Oberfläche) oder liefert keine Daten mehr.
     if (!capture.running || Date.now() - state.lastChunkAt > WATCHDOG_MS) recoverCapture();
@@ -1218,7 +1270,14 @@
     $('chk-follow').checked = false;
   }
 
+  let prevChunkPerf = 0;
   capture.onChunk = (arrayBuffer) => {
+    // Auch Aussetzer unter der Wächter-Schwelle festhalten (ein Block = 100 ms; Abstand > 500 ms ist eine Lücke).
+    const nowPerf = performance.now();
+    if (prevChunkPerf && state.session?.status === 'recording' && nowPerf - prevChunkPerf > 500) {
+      logInput('warn', 'luecke-in-oberflaeche', { abstandMs: Math.round(nowPerf - prevChunkPerf), waehrendWiederverbindung: state.recovering, ...inputSnapshot() });
+    }
+    prevChunkPerf = nowPerf;
     state.lastChunkAt = Date.now();
     state.chunkSeq += 1;
     // Immer an den Hauptprozess geben: Er entscheidet selbst, ob aufgenommen wird. (Der lokale Status hinkt

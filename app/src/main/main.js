@@ -14,6 +14,7 @@ const settings = require('./settings');
 const { Session, slug, dateStamp } = require('./session');
 const { NetServer } = require('./netserver');
 const { Updater } = require('./updater');
+const { createInputLog } = require('./inputlog');
 const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
 const RoleLogic = require('../shared/roles');
@@ -421,14 +422,48 @@ function publishHealth() {
    wurde neu geladen, Erfassung steht), wird das als ausgefallener Eingang gemeldet – auch an Companion. */
 let lastChunkAt = 0;
 const CHUNK_TIMEOUT_MS = 5000;
+
+/* Protokoll des Eingangs (`logs/eingang.log`, siehe inputlog.js). Pfad erst beim ersten Schreiben ermittelt. */
+let inputLogFile = null;
+try { inputLogFile = path.join(app.getPath('userData'), 'logs', 'eingang.log'); } catch { /* ohne Protokoll weiter */ }
+const inputLog = createInputLog(inputLogFile);
+const LOG_LEVELS = new Set(['info', 'warn', 'error']);
+/** Ein Audioblock ist 100 ms lang; ab so viel Abstand zum vorigen (im Hauptprozess gemessen) gilt es als Lücke. */
+const CHUNK_GAP_LOG_MS = 500;
+let prevRecChunkAt = 0;   // letzter Block während `recording`; 0 = keiner (Start, Pause, Ende)
+/** Ab so viel fehlender Zeit (ms) füllt der Hauptprozess nach einer Wiederverbindung mit Stille auf. */
+const GAP_FILL_MIN_MS = 300;
+let fillGapPending = false;   // gesetzt, solange der Wächter den Eingang neu verbindet (`health:input`)
+
 setInterval(() => {
   // Mehrspur: Die Blöcke kommen nicht über die Oberfläche, der Mehrspur-Prozess wacht selbst ('stall').
   const stale = session.status === 'recording' && session.mode !== 'multitrack' && Date.now() - lastChunkAt > CHUNK_TIMEOUT_MS;
   if (stale !== Boolean(health.chunksStale)) {
     health.chunksStale = stale;
+    inputLog.write(stale ? 'warn' : 'info', stale ? 'hauptprozess-keine-bloecke' : 'hauptprozess-bloecke-wieder-da',
+      { seitSekunden: lastChunkAt ? Math.round((Date.now() - lastChunkAt) / 100) / 10 : null });
     publishHealth();
   }
 }, 1000);
+
+// Zeitgeber des Hauptprozesses: bleibt der Takt aus, hing der Hauptprozess selbst (nicht Gerät oder Oberfläche).
+let lastMainTick = Date.now();
+setInterval(() => {
+  const now = Date.now();
+  const lag = now - lastMainTick - 1000;
+  lastMainTick = now;
+  if (lag > 1000 && session.status === 'recording') inputLog.write('warn', 'hauptprozess-haengt', { verzugMs: lag });
+}, 1000);
+
+// Ruhezustand, Sperrbildschirm: erklären Aussetzer, die sonst rätselhaft bleiben.
+function logPowerEvents() {
+  try {
+    const { powerMonitor } = require('electron');
+    for (const name of ['suspend', 'resume', 'lock-screen', 'unlock-screen', 'on-battery', 'on-ac']) {
+      powerMonitor.on(name, () => inputLog.write('info', `energie-${name}`, { status: session.status }));
+    }
+  } catch { /* nur Hilfe */ }
+}
 
 // Während der Aufnahme regelmäßig den vollständigen Zustand senden (Dauer, offene Abschnitte, Export-Liste),
 // auch wenn gerade niemand etwas ändert.
@@ -916,6 +951,7 @@ function createWindow() {
   // Aufnahme selbst wieder mit dem Eingang und schreibt in dieselbe Datei weiter.
   win.webContents.on('render-process-gone', (_e, details) => {
     console.error('Oberfläche beendet:', details.reason);
+    inputLog.write('error', 'oberflaeche-beendet', { grund: details.reason, exitCode: details.exitCode, status: session.status });
     if (details.reason === 'clean-exit') return;
     setTimeout(() => { if (win && !win.isDestroyed()) win.webContents.reload(); }, 500);
   });
@@ -966,6 +1002,7 @@ function preventSleep(on) {
 
 session.on('recording-started', () => {
   onMixerChange();                            // Aufnahmeart der laufenden Aufnahme gilt jetzt
+  inputLog.write('info', 'aufnahme-gestartet', { version: app.getVersion(), modus: session.mode, abtastrate: session.sampleRate });
   preventSleep(true);
   silentSince = null;
   health.silent = false;
@@ -978,6 +1015,7 @@ session.on('recording-started', () => {
 
 session.on('recording-stopped', (info) => {
   onMixerChange();
+  inputLog.write('info', 'aufnahme-beendet', {});
   session.whenWritten().then(updateMonitor);  // Aufnahmeart könnte inzwischen umgestellt sein
   preventSleep(false);
   silentSince = null;
@@ -1384,7 +1422,34 @@ ipcMain.handle('audio:read', (_e, { start, seconds } = {}) => {
 
 let lastWriteErrorToast = 0;
 ipcMain.on('audio:chunk', (_e, arrayBuffer) => {
-  lastChunkAt = Date.now();
+  const now = Date.now();
+  // Nach einem Aussetzer (Wächter verbindet den Eingang neu): Die Lücke mit Stille füllen, sonst springt die Aufnahme
+  // und alles dahinter liegt zu früh. Fehlend = Ankunft des Blocks − seine eigene Länge − Ende des vorigen Blocks.
+  // Das Merkmal bleibt gesetzt, bis die Wiederverbindung zu Ende ist (`health:input` lost=false): Kommt vorher noch
+  // ein verspäteter Block ohne echte Lücke, soll er es nicht verbrauchen.
+  if (fillGapPending && session.status === 'recording' && lastChunkAt) {
+    const chunkMs = (arrayBuffer.byteLength / (2 * session.channels) / session.sampleRate) * 1000;
+    const missingMs = now - chunkMs - lastChunkAt;
+    if (missingMs > GAP_FILL_MIN_MS) {
+      fillGapPending = false;
+      try {
+        const filled = session.fillGap(missingMs / 1000);
+        inputLog.write('warn', 'luecke-mit-stille-gefuellt', { sekunden: filled, bei: session.gaps.length ? session.gaps[session.gaps.length - 1].at : null });
+      } catch (err) {
+        inputLog.write('error', 'luecke-fuellen-fehlgeschlagen', { fehler: String(err && err.message || err) });
+      }
+    }
+  }
+  // Auch Aussetzer unter der Wächter-Schwelle (2,5 s) festhalten: nur im Zustand `recording`, nicht nach Pause/Start.
+  if (session.status === 'recording') {
+    if (prevRecChunkAt && now - prevRecChunkAt > CHUNK_GAP_LOG_MS) {
+      inputLog.write('warn', 'luecke-zwischen-bloecken', { abstandMs: now - prevRecChunkAt });
+    }
+    prevRecChunkAt = now;
+  } else {
+    prevRecChunkAt = 0;
+  }
+  lastChunkAt = now;
   try {
     session.pushAudio(Buffer.from(arrayBuffer));
   } catch (err) {
@@ -1409,7 +1474,15 @@ ipcMain.handle('cut:remove', (_e, { id }) => session.removeCut(id));
 // Die Oberfläche meldet, wenn der Audioeingang ausfällt bzw. wieder da ist.
 ipcMain.on('health:input', (_e, { lost }) => {
   health.inputLost = Boolean(lost);
+  fillGapPending = Boolean(lost) && session.status === 'recording' && session.mode !== 'multitrack';
   publishHealth();
+});
+
+// Einträge der Oberfläche (Wächter, Gerätewechsel, Zustand von Eingang und Fenster) ins Eingangsprotokoll.
+ipcMain.on('log:input', (_e, { level, event, data } = {}) => {
+  if (typeof event !== 'string' || event.length > 60) return;
+  inputLog.write(LOG_LEVELS.has(level) ? level : 'info', event,
+    data && typeof data === 'object' && !Array.isArray(data) ? data : {});
 });
 
 /* --- Abschnitte (je zwei Marker: Anfang und Ende) --- */
@@ -1682,6 +1755,7 @@ if (!singleInstance) {
     settings.load();
     setupApplicationMenu();
     createWindow();
+    logPowerEvents();
     updater.init();
     refreshDisk();
     setInterval(refreshDisk, 30000);   // Speicherplatz regelmäßig prüfen und an Netzwerk-Clients melden

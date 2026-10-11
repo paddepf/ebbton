@@ -125,6 +125,7 @@ Relevante Felder:
 | `sections[].artist` | Interpret (optional, kann fehlen oder leer sein). |
 | `sections[].source` | `churchtools`, `plan` oder `manual`. Für die Kapitel ohne Bedeutung, alle gesetzten Abschnitte zählen. |
 | `cuts[]` | Schnitte für den MP3-Export. **Für die Kapitel ignorieren**: Das Video wird nicht geschnitten. |
+| `gaps[]` | Optional, ältere Dateien haben es nicht. Aussetzer des Audioeingangs, die Ebbton mit Stille gefüllt hat (`at` Stelle, `seconds` Länge). **Für die Kapitel ignorieren:** Die WAV enthält die Lücke als Stille, die Abschnittszeiten passen deshalb weiter zur Uhr und zum Video. |
 | `service.name`, `service.date` | Name und Datum des Gottesdienstes (Ortsdatum), gut für die Anzeige auf dem Dashboard. |
 
 Regeln, die für die Abschnitte gelten:

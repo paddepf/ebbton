@@ -58,7 +58,24 @@ registerProcessor('rec-processor', RecProcessor);
       this.source = null;
       this.onChunk = null;
       this.onError = null;
+      this.onEvent = null;      // (event, data) – Zustandswechsel des Eingangs fürs Protokoll
       this.running = false;
+    }
+
+    /** Zustand von Eingang und Audiouhr für das Protokoll (nur lesen, ändert nichts). */
+    diagnostics() {
+      const track = this.stream && this.stream.getAudioTracks()[0];
+      const ctx = this.context;
+      return {
+        laeuft: this.running,
+        kontext: ctx ? ctx.state : null,
+        audiouhrS: ctx ? Math.round(ctx.currentTime * 100) / 100 : null,
+        spur: track ? { zustand: track.readyState, stumm: track.muted, aktiv: track.enabled, name: track.label } : null
+      };
+    }
+
+    _emit(event, data) {
+      if (this.onEvent) { try { this.onEvent(event, data); } catch { /* nur Hilfe */ } }
     }
 
     /** @param {'audioinput'|'audiooutput'} kind */
@@ -146,9 +163,15 @@ registerProcessor('rec-processor', RecProcessor);
       const track = this.stream.getAudioTracks()[0];
       if (track) {
         track.onended = () => {
+          this._emit('eingang-spur-beendet', this.diagnostics());
           if (this.onError) this.onError('Das Aufnahmegerät wurde getrennt.');
         };
+        // Stummschaltung durch Chromium/Windows (Gerät weg, Energiesparen, Datenschutz) – meist die Vorstufe eines Aussetzers.
+        track.onmute = () => this._emit('eingang-spur-stumm', this.diagnostics());
+        track.onunmute = () => this._emit('eingang-spur-wieder-da', this.diagnostics());
       }
+      this.context.onstatechange = () => this._emit('audiokontext-' + (this.context ? this.context.state : 'weg'), this.diagnostics());
+      this._emit('eingang-geoeffnet', { ...this.diagnostics(), abtastrate: this.context.sampleRate, modus: usedWorklet ? 'worklet' : 'fallback', ersatzgeraet: fallback });
 
       return {
         ok: true,

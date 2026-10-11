@@ -151,6 +151,30 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   **Welches ChurchTools-Feld den Infotext trägt, ist nicht gegen eine echte Instanz geprüft** (mehrere Feldnamen
   werden probiert); bei Abweichungen die echte Antwort von `GET /api/events/{id}` ansehen und `eventInfoText` anpassen.
 
+### Eingangsprotokoll (2026-10-11)
+- Anlass: Am Kirchen-PC meldete der Wächter während einer echten Aufnahme immer wieder „Kein Audiosignal – der
+  Eingang wird neu verbunden“, ohne dass am Pult etwas zu sehen war; in der Session fehlten etwa 2,5–3 Minuten gegenüber
+  der Uhr. Ein Programmlog gab es bis dahin nur für den Updater. Die Ursache ist **ungeklärt** (Verdacht: Eingang
+  „Systemstandard“/Windows-Ton, kurz hängende Oberfläche, Fenster gedrosselt).
+- `src/main/inputlog.js` schreibt `userData/logs/eingang.log` (Ortszeit, eine Zeile je Ereignis, ab 2 MB → `.1`; Fehler
+  beim Schreiben werden verschluckt, damit die Aufnahme nie gestört wird). Quellen: Hauptprozess (Lücken zwischen
+  `audio:chunk` > 500 ms, `chunksStale`, Verzug des eigenen Zeitgebers, `powerMonitor`, Absturz der Oberfläche, Start/Ende),
+  Oberfläche über IPC `log:input` (`window.api.logInput`): Lücken zwischen Blöcken, Wächter-Auslösung mit
+  Zustandsfoto (`inputSnapshot`: Spur `zustand`/`stumm`, Audiokontext und Audiouhr, `visibilityState`, Fokus),
+  Verzug des Wächter-Takts, `devicechange`, Zustandswechsel aus `Capture.onEvent` (Spur stumm/beendet, Kontext).
+- **Aussetzer werden mit Stille gefüllt** (`Session.fillGap`, Stereo): Anlass war ein hörbarer Sprung in der Aufnahme –
+  die fehlenden Sekunden stehen sonst gar nicht in der WAV, die Wellenform zeigt nichts, alles dahinter liegt gegenüber
+  der Uhr zu früh. Ablauf: Der Wächter meldet `health:input` lost=true, der Hauptprozess merkt `fillGapPending`; beim
+  ersten Audioblock mit Lücke (fehlend = Ankunft − Blocklänge − Ende des vorigen Blocks > 300 ms) füllt er sie über
+  `pushAudio` in 0,5-s-Blöcken (Dauer, Wellenform, Lautheit wachsen mit; höchstens 300 s je Aussetzer). Das Merkmal
+  bleibt gesetzt, bis die Wiederverbindung zu Ende ist (lost=false), damit ein verspäteter Block ohne echte Lücke es
+  nicht verbraucht. Die Oberfläche holt danach Wellenform und Lautheit per `session.state()` neu (ihre mitgerechneten
+  Peaks wären um die Lücke zu kurz). `session.gaps` (`{at, seconds}`) steht in der Session-Datei, damit man die Stellen
+  findet. Bewusst **nur** bei Wiederverbindung, nicht bei jeder Verzögerung der Blöcke: Hängt nur die Oberfläche, kommen
+  die Blöcke gesammelt nach, dann wäre Auffüllen falsch. Mehrspur füllt nicht (eigener Prozess meldet `gap`).
+- Die Schwelle des Wächters (`WATCHDOG_MS` 2,5 s) bleibt unverändert, bis das Protokoll die Ursache zeigt – erst lesen,
+  dann entscheiden. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
+
 ### Absicherung der Aufnahme (Review Oktober 2026)
 - Die Audioerfassung lebt im Renderer. Deshalb: kein „Neu laden“ im Mac-Menü (lag auf Cmd+R), Live-Reload des
   Renderers nicht während einer Aufnahme, und bei `render-process-gone` wird neu geladen. `init()` erkennt eine

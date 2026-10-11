@@ -391,6 +391,32 @@ Suche fehl (kein Internet), gibt es keine Meldung, nur einen Vermerk in den Eins
 `logs/updater.log` im Einstellungsordner (`%APPDATA%\ebbton` bzw. `~/Library/Application Support/ebbton`).
 
 **Während einer laufenden oder pausierten Aufnahme wird weder gesucht, heruntergeladen noch installiert.**
+
+### Eingangsprotokoll
+
+Meldet die App „Kein Audiosignal – der Eingang wird neu verbunden“, obwohl am Pult alles in Ordnung scheint, hilft
+`logs/eingang.log` im Einstellungsordner (`%APPDATA%\ebbton` bzw. `~/Library/Application Support/ebbton`; über 2 MB wird
+daraus `eingang.log.1`). Eine Zeile je Ereignis: Ortszeit mit Offset · Stufe · Ereignis · Daten als JSON.
+
+| Ereignis | Bedeutung |
+|---|---|
+| `aufnahme-gestartet` / `-beendet` | Rahmen; der Start nennt Version, Modus und Abtastrate |
+| `eingang-geoeffnet` | Eingang (neu) geöffnet, mit Gerätename, Kontext- und Spurzustand |
+| `luecke-in-oberflaeche` / `luecke-zwischen-bloecken` | Zwischen zwei 100-ms-Blöcken vergingen > 500 ms (Oberfläche bzw. Hauptprozess gemessen) – auch Aussetzer unter der 2,5-s-Schwelle des Wächters |
+| `wiederverbinden-start` | Der Wächter hat ausgelöst: seit wie vielen ms keine Blöcke, dazu Zustand von Spur (`zustand`, `stumm`), Audiokontext, Fenster (`sichtbar`, `fokus`) |
+| `wiederverbunden` / `wiederverbinden-fehlgeschlagen` | Ausgang des Versuchs, `fehlenSekunden` = Lücke in der Aufnahme |
+| `luecke-mit-stille-gefuellt` | Die Lücke wurde mit Stille aufgefüllt (`sekunden`, `bei` = Stelle in der Aufnahme); auch in der Session-Datei unter `gaps` |
+| `eingang-spur-stumm` / `-wieder-da` / `-beendet` | Chromium stuft die Eingangsspur als stumm/weg ein (Gerät, Energiesparen, Datenschutz) |
+| `audiokontext-suspended` / `-closed` | Der Audiokontext wurde angehalten |
+| `geraete-geaendert` | Geräte eingesteckt/entfernt oder Standardgerät gewechselt (Eingang steht auf „Systemstandard“) |
+| `oberflaeche-haengt` / `hauptprozess-haengt` | Der Zeitgeber der Oberfläche bzw. des Hauptprozesses blieb > 1 s aus: Rechner oder Fenster ausgelastet/gedrosselt |
+| `hauptprozess-keine-bloecke` / `-bloecke-wieder-da` | Der Hauptprozess bekam 5 s lang keine Blöcke |
+| `oberflaeche-beendet` | Die Oberfläche ist abgestürzt und wird neu geladen |
+| `energie-suspend` / `-resume` / `-lock-screen` … | Ruhezustand, Sperrbildschirm, Netz/Akku |
+
+So liest man es: `eingang-spur-stumm` oder `geraete-geaendert` kurz vor dem Aussetzer → Gerät bzw. Windows-Ton;
+`oberflaeche-haengt`/`hauptprozess-haengt` zur selben Zeit → Rechner ausgelastet; `energie-*` → Ruhezustand;
+nichts davon, nur `luecke-*` bei laufender Spur → Treiber/Gerät liefert zu spät.
 Der Dialog öffnet sich dann nicht von selbst, die Knöpfe sind mit Hinweis gesperrt.
 
 ### Neue Version veröffentlichen
@@ -480,6 +506,7 @@ src/main/        Hauptprozess
   churchtools.js ChurchTools-API
   netserver.js   WebSocket-Schnittstelle
   updater.js     Updates über GitHub Releases
+  inputlog.js    Eingangsprotokoll (logs/eingang.log, siehe „Eingangsprotokoll“)
   settings.js    Einstellungen, Token-Verschlüsselung
   multitrack/    Mehrspuraufnahme
     engine.js    Gerät öffnen (audify/ASIO), Pegel, Aussetzer erkennen, Gerät neu öffnen
