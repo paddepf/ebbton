@@ -420,6 +420,8 @@ nichts davon, nur `luecke-*` bei laufender Spur → Treiber/Gerät liefert zu sp
 Bekannte Ursache: Chromium drosselte Ebbton im Hintergrund (minimiert/verdeckt, ab etwa 5 min) so stark, dass die
 Audioblöcke nur noch stoßweise ankamen und der Wächter neu verband. Seit Oktober 2026 läuft Ebbton deshalb ohne
 Hintergrund-Drosselung. Viele `oberflaeche-haengt`-Zeilen mit `"sichtbar":"hidden"` deuten darauf, dass das nicht greift.
+Unter Windows fehlen trotzdem noch etwa 1–1,5 % Audio, solange Ebbton nicht im Vordergrund ist (minimiert oder
+verdeckt). Das steht in keinem Protokoll und erzeugt keine Warnung – Ebbton während der Aufnahme vorne lassen.
 Hing die Oberfläche (`oberflaeche-haengt`), verbindet der Wächter in dieser Runde nicht neu: Die Erfassung lief im
 eigenen Thread weiter, ihre Blöcke kommen gleich nach – Neuverbinden würde sie verwerfen. Folgt trotzdem
 `wiederverbinden-start`, war der Eingang wirklich weg.

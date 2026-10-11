@@ -197,9 +197,16 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   verdeckt (maximiertes Fenster darüber, Seite blieb `visible`) −6,8 s, im Vordergrund −0,08 s. Der Verlust ist **leise**:
   gleichmäßig 1,4–2 %, kein Wiederverbinden, keine `gaps`; die Audiouhr der Oberfläche läuft selbst zu langsam (der
   Audio-Thread bekommt zu wenig Rechenzeit, Chromium verwirft Eingangsdaten). Der Wächter sieht das nicht – bei Stereo
-  gibt es keine Fehlbetragsmessung gegen die Uhr (Mehrspur hat eine). Ob die Abhilfe unter Windows reicht
-  (`disable-renderer-backgrounding` verhindert abgesenkte Priorität/Effizienzmodus des Renderers), ist **noch nicht
-  geprüft**; gleicher Test mit der neuen Version steht aus. Geplant danach: Fehlbetragsmessung für Stereo.
+  gibt es keine Fehlbetragsmessung gegen die Uhr (Mehrspur hat eine).
+- **Abhilfe reicht unter Windows nicht** (Kirchen-PC, gleicher Test mit 5135b92, 2026-10-11): minimiert −4,7 s (vorher
+  −8,9), verdeckt −6,8 s (unverändert), Vordergrund −0,07 s. Die Abhilfe greift sichtbar: keine einzige Protokollzeile
+  zwischen Start und Ende (vorher zehnmal `oberflaeche-haengt`), `visibilityState` bleibt auch minimiert `visible`. Der
+  leise Verlust (1,1–1,6 %, keine `gaps`, kommt nach dem Zurückholen nicht wieder) bleibt aber. Geprüft per
+  `GetProcessInformation(ProcessPowerThrottling)` nach 30 s und 6 min im Hintergrund: alle electron.exe-Prozesse
+  Priorität Normal (GPU AboveNormal), **kein Effizienzmodus** (`state=0x0`) – Prozesspriorität/EcoQoS sind es also nicht.
+  Verdacht (ungeprüft): Windows drosselt einzelne Threads (Audio-Thread des Renderers), solange das Fenster nicht vorne
+  ist; per Prozessabfrage nicht sichtbar. Bis zur Lösung am Kirchen-PC Ebbton im Vordergrund lassen. Geplant:
+  Fehlbetragsmessung für Stereo, Ursache auf Thread-Ebene suchen (bzw. Erfassung aus der Oberfläche herauslösen).
 - `lastChunkAt` wird beim Start gesetzt, sonst stand bei jedem Start `hauptprozess-keine-bloecke` im Protokoll. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
 
 ### Absicherung der Aufnahme (Review Oktober 2026)
