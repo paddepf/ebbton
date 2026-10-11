@@ -417,6 +417,9 @@ daraus `eingang.log.1`). Eine Zeile je Ereignis: Ortszeit mit Offset · Stufe ·
 So liest man es: `eingang-spur-stumm` oder `geraete-geaendert` kurz vor dem Aussetzer → Gerät bzw. Windows-Ton;
 `oberflaeche-haengt`/`hauptprozess-haengt` zur selben Zeit → Rechner ausgelastet; `energie-*` → Ruhezustand;
 nichts davon, nur `luecke-*` bei laufender Spur → Treiber/Gerät liefert zu spät.
+Bekannte Ursache: Chromium drosselte Ebbton im Hintergrund (minimiert/verdeckt, ab etwa 5 min) so stark, dass die
+Audioblöcke nur noch stoßweise ankamen und der Wächter neu verband. Seit Oktober 2026 läuft Ebbton deshalb ohne
+Hintergrund-Drosselung. Viele `oberflaeche-haengt`-Zeilen mit `"sichtbar":"hidden"` deuten darauf, dass das nicht greift.
 Hing die Oberfläche (`oberflaeche-haengt`), verbindet der Wächter in dieser Runde nicht neu: Die Erfassung lief im
 eigenen Thread weiter, ihre Blöcke kommen gleich nach – Neuverbinden würde sie verwerfen. Folgt trotzdem
 `wiederverbinden-start`, war der Eingang wirklich weg.

@@ -31,6 +31,14 @@ const updater = new Updater(() => session.status === 'recording' || session.stat
 
 const isDev = process.argv.includes('--dev');
 
+// Die Audioerfassung läuft in der Oberfläche. Chromium drosselt Fenster im Hintergrund (minimiert, verdeckt, nach
+// 5 min noch stärker) und stellt dann auch die Audioblöcke nur noch stoßweise zu – der Wächter hielt das für einen
+// ausgefallenen Eingang und verwarf beim Neuverbinden die wartenden Blöcke (Aussetzer am Kirchen-PC, nachgestellt
+// am Mac). Deshalb ohne Drosselung; zusätzlich `backgroundThrottling: false` am Fenster.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+
 // Unbehandelte Fehler nur protokollieren und melden: Electrons Standard ist ein Fehlerdialog, der den
 // Hauptprozess blockiert – und damit das Schreiben der Aufnahme.
 process.on('uncaughtException', (err) => {
@@ -909,7 +917,8 @@ function createWindow() {
       preload: path.join(__dirname, '..', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      backgroundThrottling: false   // Audioerfassung läuft hier, siehe Schalter oben
     }
   });
 
@@ -1003,6 +1012,7 @@ function preventSleep(on) {
 session.on('recording-started', () => {
   onMixerChange();                            // Aufnahmeart der laufenden Aufnahme gilt jetzt
   inputLog.write('info', 'aufnahme-gestartet', { version: app.getVersion(), modus: session.mode, abtastrate: session.sampleRate });
+  lastChunkAt = Date.now();                   // sonst gilt der Eingang ab dem Start kurz als „keine Blöcke“
   preventSleep(true);
   silentSince = null;
   health.silent = false;

@@ -181,7 +181,26 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   blockiert): Aufnahmedauer = Uhrzeit, kein Neuverbinden. Dort kamen die Blöcke allerdings immer *vor* dem Takt an
   (dann griff der alte Wächter auch nicht); der Schutz deckt die umgekehrte Reihenfolge ab, die unter Windows nicht
   ausgeschlossen ist. Beim gewollten Schließen (`capture.stop`) wird `onstatechange` vorher entfernt, sonst stand bei
-  jedem Beenden `audiokontext-weg` im Protokoll. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
+  jedem Beenden `audiokontext-weg` im Protokoll.
+- **Ursache gefunden: Drosselung im Hintergrund** (2026-10-11, Hinweis des Nutzers: Aussetzer nur, wenn Ebbton nicht
+  vorne war). Nachgestellt am Mac: Aufnahme, Fenster per AppleScript ausgeblendet, 7 min. Nach etwa 5 min drosselt
+  Chromium stark: Zeitgeber bis 9 s verspätet, Audioblöcke kommen nur noch stoßweise (Lücken bis 7 s, die Audiouhr lief
+  dabei ungestört weiter). Der Wächter verband zweimal neu und verwarf dabei die wartenden Blöcke – 16 s echtes Audio
+  wurden zu Stille, 6 s fehlten ganz. Der Schutz „eine Runde aussetzen“ reicht dagegen nicht. **Abhilfe:**
+  `backgroundThrottling: false` am Fenster und die Chromium-Schalter `disable-renderer-backgrounding`,
+  `disable-background-timer-throttling`, `disable-backgrounding-occluded-windows` (oben in `main.js`, vor `ready`).
+  Danach derselbe Test: Uhr 420,6 s, Aufnahme 420,4 s, keine einzige Protokollzeile zwischen Start und Ende;
+  `document.visibilityState` bleibt `visible`. Die Schlafsperre `prevent-app-suspension` lief in beiden Fällen, sie
+  verhindert die Drosselung durch Chromium also nicht. Die Schalter nicht entfernen, solange die Erfassung in der
+  Oberfläche läuft.
+- **Windows sieht anders aus** (Kirchen-PC, Stand *vor* der Abhilfe, Eingang „Stereomix“, je 7 min): minimiert −8,9 s,
+  verdeckt (maximiertes Fenster darüber, Seite blieb `visible`) −6,8 s, im Vordergrund −0,08 s. Der Verlust ist **leise**:
+  gleichmäßig 1,4–2 %, kein Wiederverbinden, keine `gaps`; die Audiouhr der Oberfläche läuft selbst zu langsam (der
+  Audio-Thread bekommt zu wenig Rechenzeit, Chromium verwirft Eingangsdaten). Der Wächter sieht das nicht – bei Stereo
+  gibt es keine Fehlbetragsmessung gegen die Uhr (Mehrspur hat eine). Ob die Abhilfe unter Windows reicht
+  (`disable-renderer-backgrounding` verhindert abgesenkte Priorität/Effizienzmodus des Renderers), ist **noch nicht
+  geprüft**; gleicher Test mit der neuen Version steht aus. Geplant danach: Fehlbetragsmessung für Stereo.
+- `lastChunkAt` wird beim Start gesetzt, sonst stand bei jedem Start `hauptprozess-keine-bloecke` im Protokoll. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
 
 ### Absicherung der Aufnahme (Review Oktober 2026)
 - Die Audioerfassung lebt im Renderer. Deshalb: kein „Neu laden“ im Mac-Menü (lag auf Cmd+R), Live-Reload des
