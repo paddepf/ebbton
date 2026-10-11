@@ -1102,6 +1102,8 @@
       showAudioWarning(true, multi
         ? 'Mischpult-Routing passt nicht: Die USB-Ausgänge liefern die Stereo-Matrix, Ebbton nimmt aber Mehrspur auf.'
         : 'Mischpult-Routing passt nicht: Die USB-Ausgänge liefern einzelne Kanäle, Ebbton nimmt aber Stereo auf.', 'silent');
+    } else if (h && h.deficit && isLive()) {
+      showAudioWarning(true, `Der Aufnahme fehlen gegenüber der Uhr schon ${String(h.deficit).replace('.', ',')} s – Audio geht leise verloren. Ebbton sichtbar lassen (Mini-Fenster „immer oben“).`, 'silent');
     } else if (h && h.input === 'silent' && state.session?.status === 'recording') {
       showAudioWarning(true, 'Seit über 20 Sekunden kaum Pegel – Mischpult oder Kabel prüfen?', 'silent');
     } else {

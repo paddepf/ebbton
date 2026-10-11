@@ -218,6 +218,16 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `-fehlgeschlagen`), bei Fehlschlag Warnung „Fenster sichtbar lassen“. **Die gepackte App mit diesem Fix ist unter
   Windows noch nicht getestet** (C# lässt sich am Mac nicht übersetzen; Tests prüfen nur das erzeugte Skript). Nicht
   geprüft ist auch, ob die Ausnahme den Fall „verdeckt“ (B) ebenso behebt – naheliegend, weil dieselbe Regel greift.
+- **Fehlbetragsmessung (Stereo)** (`deficit.js`, `DeficitMeter`; Takt im Hauptprozess jede Sekunde): vergangene Zeit
+  minus aufgenommene Dauer, Pausen ausgenommen, Messbeginn erst beim ersten neuen Block nach Start/Fortsetzen (sonst
+  ~0,1 s Übertragungszeit als Dauer-Fehlbetrag). Gemeldet wird das **Minimum der letzten 10 Messungen** – Blöcke, die
+  nach einem Hänger gesammelt nachkommen, sind kein Verlust. Mit Stille gefüllte Aussetzer zählen als aufgenommen.
+  Protokoll `fehlbetrag` je angefangene halbe Sekunde, Gesamtwert bei `aufnahme-beendet`. Ab 2 s **Warnbalken** über
+  `health.deficit` (halbe Sekunden, damit sich `health` nicht jede Sekunde ändert; auch für Netzwerk-Clients) statt einer
+  Meldung – die verschwände nach 15 s, und gerade im Hintergrund sähe sie niemand; nach dem Beenden einmal als Warnung.
+  Uhrendrift (< 100 ppm ≈ 0,5 s je 90 min) bleibt unter der Schwelle. Mehrspur misst selbst (`gap`). Geprüft am Mac:
+  jeden 50. Block im Hauptprozess verworfen (Inspector) → Protokoll ab 0,5 s, Balken bei 2,5 s, Warnung nach dem Ende,
+  Balken danach aus; Gegenprobe mit 3,5-s-Hänger ohne Verlust → Fehlbetrag 0.
 - `lastChunkAt` wird beim Start gesetzt, sonst stand bei jedem Start `hauptprozess-keine-bloecke` im Protokoll. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
 
 ### Absicherung der Aufnahme (Review Oktober 2026)

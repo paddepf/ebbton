@@ -16,6 +16,7 @@ const { NetServer } = require('./netserver');
 const { Updater } = require('./updater');
 const { createInputLog } = require('./inputlog');
 const { exemptFromTimerThrottling } = require('./timerres');
+const { DeficitMeter } = require('./deficit');
 const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
 const RoleLogic = require('../shared/roles');
@@ -412,6 +413,7 @@ function currentHealth() {
     write,
     writeMessage: health.writeError || null,
     routing,
+    deficit: health.deficit || null,
     disk: d ? { freeBytes: d.freeBytes, hoursLeft: d.hoursLeft, level: diskLevel } : null
   };
 }
@@ -444,6 +446,34 @@ let prevRecChunkAt = 0;   // letzter Block während `recording`; 0 = keiner (Sta
 /** Ab so viel fehlender Zeit (ms) füllt der Hauptprozess nach einer Wiederverbindung mit Stille auf. */
 const GAP_FILL_MIN_MS = 300;
 let fillGapPending = false;   // gesetzt, solange der Wächter den Eingang neu verbindet (`health:input`)
+
+/* Fehlbetrag der Stereo-Aufnahme gegen die Uhr (siehe deficit.js): leiser Verlust, den der Wächter nicht sieht.
+   Protokoll je angefangene halbe Sekunde, ab DEFICIT_WARN_S Warnbalken (`health.deficit`). */
+const DEFICIT_WARN_S = 2;
+const deficit = new DeficitMeter();
+let deficitStatus = null;     // Status bei der letzten Messung (erkennt Pause/Fortsetzen)
+let deficitLogged = 0;        // zuletzt protokollierte Stufe (s)
+
+setInterval(() => {
+  const status = session.mode === 'multitrack' ? null : session.status;   // Mehrspur misst selbst ('gap')
+  if (status === 'recording' && deficitStatus !== 'recording') deficit.resume(session.duration);
+  if (status !== 'recording' && deficitStatus === 'recording') deficit.pause();
+  deficitStatus = status;
+  if (status !== 'recording') return;
+  const { deficit: missing, elapsed } = deficit.sample(Date.now(), session.duration);
+  const step = Math.floor(missing * 2) / 2;
+  if (step >= 0.5 && step > deficitLogged) {
+    deficitLogged = step;
+    inputLog.write('warn', 'fehlbetrag', { sekunden: Math.round(missing * 10) / 10, seitMinuten: Math.round(elapsed / 6) / 10,
+      prozent: elapsed > 0 ? Math.round((missing / elapsed) * 1000) / 10 : null });
+  }
+  // Als bleibender Warnbalken (über `health`), nicht als Meldung: Die verschwände nach 15 s, und gerade wenn Ebbton im
+  // Hintergrund ist, sähe sie niemand. In halben Sekunden, damit sich `health` nicht jede Sekunde ändert.
+  if (missing >= DEFICIT_WARN_S) {
+    const shown = Math.floor(missing * 2) / 2;
+    if (health.deficit !== shown) { health.deficit = shown; publishHealth(); }
+  }
+}, 1000);
 
 setInterval(() => {
   // Mehrspur: Die Blöcke kommen nicht über die Oberfläche, der Mehrspur-Prozess wacht selbst ('stall').
@@ -1031,6 +1061,11 @@ session.on('recording-started', () => {
   onMixerChange();                            // Aufnahmeart der laufenden Aufnahme gilt jetzt
   inputLog.write('info', 'aufnahme-gestartet', { version: app.getVersion(), modus: session.mode, abtastrate: session.sampleRate });
   lastChunkAt = Date.now();                   // sonst gilt der Eingang ab dem Start kurz als „keine Blöcke“
+  deficit.reset();
+  deficit.resume(session.duration);           // auch beim Anhängen: gemessen wird ab hier
+  deficitStatus = 'recording';
+  deficitLogged = 0;
+  health.deficit = null;
   preventSleep(true);
   silentSince = null;
   health.silent = false;
@@ -1043,7 +1078,16 @@ session.on('recording-started', () => {
 
 session.on('recording-stopped', (info) => {
   onMixerChange();
-  inputLog.write('info', 'aufnahme-beendet', {});
+  // Gesamter Fehlbetrag gegen die Uhr (Stereo) – auch ohne Warnung aufschlussreich (Uhrendrift, kleine Verluste).
+  inputLog.write('info', 'aufnahme-beendet', session.mode === 'multitrack' ? {} : {
+    fehlbetragSekunden: Math.round(deficit.last * 100) / 100,
+    gemessenMinuten: Math.round(deficit.lastElapsed / 6) / 10
+  });
+  // Der Balken verschwindet mit dem Ende der Aufnahme; damit es nicht untergeht, einmal als Warnung nennen.
+  if (health.deficit) {
+    toast('warn', `Dieser Aufnahme fehlen gegenüber der Uhr etwa ${String(Math.round(deficit.last * 10) / 10).replace('.', ',')} s (leise verlorenes Audio). Details in logs/eingang.log.`);
+    health.deficit = null;
+  }
   session.whenWritten().then(updateMonitor);  // Aufnahmeart könnte inzwischen umgestellt sein
   preventSleep(false);
   silentSince = null;

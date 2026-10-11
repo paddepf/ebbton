@@ -400,7 +400,9 @@ daraus `eingang.log.1`). Eine Zeile je Ereignis: Ortszeit mit Offset · Stufe ·
 
 | Ereignis | Bedeutung |
 |---|---|
-| `aufnahme-gestartet` / `-beendet` | Rahmen; der Start nennt Version, Modus und Abtastrate |
+| `aufnahme-gestartet` / `-beendet` | Rahmen; der Start nennt Version, Modus und Abtastrate, das Ende bei Stereo den gesamten Fehlbetrag gegen die Uhr (`fehlbetragSekunden`, `gemessenMinuten`) |
+| `fehlbetrag` | Der Stereo-Aufnahme fehlen gegenüber der Uhr so viele Sekunden (je angefangene halbe Sekunde ein Eintrag, mit `prozent`) – leiser Verlust ohne einzelnen Aussetzer. Ab 2 s Warnbalken in der Oberfläche, nach dem Beenden eine Warnung |
+| `timer-regel-ausgenommen` / `-fehlgeschlagen` | Nur Windows: Die Oberfläche wurde von der Timer-Regel für Hintergrundfenster ausgenommen (mit `control`/`state`) bzw. nicht |
 | `eingang-geoeffnet` | Eingang (neu) geöffnet, mit Gerätename, Kontext- und Spurzustand |
 | `luecke-in-oberflaeche` / `luecke-zwischen-bloecken` | Zwischen zwei 100-ms-Blöcken vergingen > 500 ms (Oberfläche bzw. Hauptprozess gemessen) – auch Aussetzer unter der 2,5-s-Schwelle des Wächters |
 | `wiederverbinden-start` | Der Wächter hat ausgelöst: seit wie vielen ms keine Blöcke, dazu Zustand von Spur (`zustand`, `stumm`), Audiokontext, Fenster (`sichtbar`, `fokus`) |
@@ -518,6 +520,7 @@ src/main/        Hauptprozess
   netserver.js   WebSocket-Schnittstelle
   updater.js     Updates über GitHub Releases
   inputlog.js    Eingangsprotokoll (logs/eingang.log, siehe „Eingangsprotokoll“)
+  deficit.js     Fehlbetrag der Stereo-Aufnahme gegen die Uhr (leiser Verlust)
   timerres.js    Windows: Oberfläche von der Timer-Regel für Hintergrundfenster ausnehmen
   settings.js    Einstellungen, Token-Verschlüsselung
   multitrack/    Mehrspuraufnahme

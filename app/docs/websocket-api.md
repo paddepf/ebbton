@@ -91,6 +91,7 @@ Wird direkt nach der Anmeldung und bei jeder Änderung gesendet (max. 10×/s).
       "write": "ok",
       "writeMessage": null,
       "routing": "ok",
+      "deficit": null,
       "disk": { "freeBytes": 52000000000, "hoursLeft": 75.2, "level": "ok" }
     }
   }
@@ -104,6 +105,8 @@ hinterher, Audio wird gepuffert) oder `error` (Schreibfehler, z. B. Platte voll 
 `health.routing` sagt, ob das Routing der USB-Ausgänge am Mischpult zur Aufnahmeart passt: `ok`, `mismatch`
 (z. B. Mehrspur eingestellt, Pult liefert aber die Stereo-Matrix), `unknown` (Pult nicht erreichbar oder Routing
 nicht eindeutig) oder `null` (keine Pult-Verbindung eingerichtet).
+`health.deficit` ist während einer Stereo-Aufnahme die Zahl der Sekunden (in halben Sekunden), die der Aufnahme
+gegenüber der Uhr fehlen, sobald es mindestens 2 s sind – Audio geht dann leise verloren; sonst `null`.
 `health.disk.level` ist `ok`, `warn` (unter
 3 Stunden Platz) oder `low` (unter 30 Minuten). `health` ändert sich unabhängig von der
 Aufnahme; der Speicherwert wird alle 30 Sekunden erneuert. Während einer Aufnahme kommt der Zustand
