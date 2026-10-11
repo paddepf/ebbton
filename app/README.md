@@ -409,7 +409,7 @@ daraus `eingang.log.1`). Eine Zeile je Ereignis: Ortszeit mit Offset · Stufe ·
 | `eingang-spur-stumm` / `-wieder-da` / `-beendet` | Chromium stuft die Eingangsspur als stumm/weg ein (Gerät, Energiesparen, Datenschutz) |
 | `audiokontext-suspended` / `-closed` | Der Audiokontext wurde angehalten |
 | `geraete-geaendert` | Geräte eingesteckt/entfernt oder Standardgerät gewechselt (Eingang steht auf „Systemstandard“) |
-| `oberflaeche-haengt` / `hauptprozess-haengt` | Der Zeitgeber der Oberfläche bzw. des Hauptprozesses blieb > 1 s aus: Rechner oder Fenster ausgelastet/gedrosselt |
+| `oberflaeche-haengt` / `hauptprozess-haengt` | Der Zeitgeber der Oberfläche bzw. des Hauptprozesses blieb > 1 s aus: Rechner oder Fenster ausgelastet/gedrosselt. `waechterWartet: true` = der Wächter hat deshalb eine Runde ausgesetzt (siehe unten) |
 | `hauptprozess-keine-bloecke` / `-bloecke-wieder-da` | Der Hauptprozess bekam 5 s lang keine Blöcke |
 | `oberflaeche-beendet` | Die Oberfläche ist abgestürzt und wird neu geladen |
 | `energie-suspend` / `-resume` / `-lock-screen` … | Ruhezustand, Sperrbildschirm, Netz/Akku |
@@ -417,6 +417,9 @@ daraus `eingang.log.1`). Eine Zeile je Ereignis: Ortszeit mit Offset · Stufe ·
 So liest man es: `eingang-spur-stumm` oder `geraete-geaendert` kurz vor dem Aussetzer → Gerät bzw. Windows-Ton;
 `oberflaeche-haengt`/`hauptprozess-haengt` zur selben Zeit → Rechner ausgelastet; `energie-*` → Ruhezustand;
 nichts davon, nur `luecke-*` bei laufender Spur → Treiber/Gerät liefert zu spät.
+Hing die Oberfläche (`oberflaeche-haengt`), verbindet der Wächter in dieser Runde nicht neu: Die Erfassung lief im
+eigenen Thread weiter, ihre Blöcke kommen gleich nach – Neuverbinden würde sie verwerfen. Folgt trotzdem
+`wiederverbinden-start`, war der Eingang wirklich weg.
 Der Dialog öffnet sich dann nicht von selbst, die Knöpfe sind mit Hinweis gesperrt.
 
 ### Neue Version veröffentlichen

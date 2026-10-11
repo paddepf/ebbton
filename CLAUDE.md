@@ -173,7 +173,15 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   findet. Bewusst **nur** bei Wiederverbindung, nicht bei jeder Verzögerung der Blöcke: Hängt nur die Oberfläche, kommen
   die Blöcke gesammelt nach, dann wäre Auffüllen falsch. Mehrspur füllt nicht (eigener Prozess meldet `gap`).
 - Die Schwelle des Wächters (`WATCHDOG_MS` 2,5 s) bleibt unverändert, bis das Protokoll die Ursache zeigt – erst lesen,
-  dann entscheiden. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
+  dann entscheiden.
+- **Wächter setzt nach einem Hänger der Oberfläche eine Runde aus** (Takt > 1 s verspätet, höchstens einmal am Stück,
+  nur bei laufender Erfassung; im Protokoll `waechterWartet: true`). Grund: Die Erfassung läuft im Audio-Thread weiter,
+  ihre Blöcke warten in der Warteschlange; `recoverCapture` → `capture.stop()` setzt `port.onmessage = null` und würde
+  sie verwerfen – aus einem Hänger würde echter Verlust. Geprüft (Mac, echte App, Oberfläche 3,5/6 s per DevTools
+  blockiert): Aufnahmedauer = Uhrzeit, kein Neuverbinden. Dort kamen die Blöcke allerdings immer *vor* dem Takt an
+  (dann griff der alte Wächter auch nicht); der Schutz deckt die umgekehrte Reihenfolge ab, die unter Windows nicht
+  ausgeschlossen ist. Beim gewollten Schließen (`capture.stop`) wird `onstatechange` vorher entfernt, sonst stand bei
+  jedem Beenden `audiokontext-weg` im Protokoll. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
 
 ### Absicherung der Aufnahme (Review Oktober 2026)
 - Die Audioerfassung lebt im Renderer. Deshalb: kein „Neu laden“ im Mac-Menü (lag auf Cmd+R), Live-Reload des

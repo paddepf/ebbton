@@ -1171,15 +1171,24 @@
   }
 
   let lastWatchTick = performance.now();
+  let watchdogWaited = false;   // in der vorigen Runde wegen eines Hängers ausgesetzt (höchstens einmal am Stück)
   setInterval(() => {
     // Bleibt der Takt der Oberfläche aus (Fenster gedrosselt, Hauptthread blockiert), liefert auch die Erfassung
     // verspätet: dann ist nicht das Gerät schuld, sondern die Oberfläche bzw. der Rechner.
     const nowPerf = performance.now();
     const lag = nowPerf - lastWatchTick - 1000;
     lastWatchTick = nowPerf;
-    if (lag > 1000 && state.session?.status === 'recording') logInput('warn', 'oberflaeche-haengt', { verzugMs: Math.round(lag), ...inputSnapshot() });
+    const hung = lag > 1000;
+    const recordingNow = state.session?.status === 'recording';
+    // Nach einem Hänger einmal aussetzen: Die Erfassung lief in ihrem eigenen Thread weiter, ihre Blöcke warten
+    // noch in der Warteschlange. Neu verbinden (`capture.stop`) würde sie verwerfen – aus einem harmlosen Hänger
+    // würden so mehrere Sekunden echter Verlust. Ist der Eingang wirklich weg, greift der Wächter eine Runde später.
+    const wait = hung && !watchdogWaited && capture.running;
+    if (hung && recordingNow) logInput('warn', 'oberflaeche-haengt', { verzugMs: Math.round(lag), waechterWartet: wait, ...inputSnapshot() });
+    watchdogWaited = wait;
+    if (wait) return;
 
-    if (state.session?.status !== 'recording' || state.starting || state.recovering || isMultitrack()) return;
+    if (!recordingNow || state.starting || state.recovering || isMultitrack()) return;
     // Erfassung läuft nicht (z. B. nach Neuladen der Oberfläche) oder liefert keine Daten mehr.
     if (!capture.running || Date.now() - state.lastChunkAt > WATCHDOG_MS) recoverCapture();
   }, 1000);

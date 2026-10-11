@@ -226,7 +226,8 @@ registerProcessor('rec-processor', RecProcessor);
         if (this.node && this.node.disconnect) this.node.disconnect();
         if (this.source) this.source.disconnect();
         if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
-        if (this.context) await this.context.close();
+        // Gewolltes Schließen ist kein Ereignis fürs Eingangsprotokoll (sonst bei jedem Beenden „audiokontext-weg“).
+        if (this.context) { this.context.onstatechange = null; await this.context.close(); }
       } catch (err) {
         console.warn('Fehler beim Schließen der Audioerfassung:', err);
       }
