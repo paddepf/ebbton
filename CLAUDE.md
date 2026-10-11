@@ -390,6 +390,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Notizen leer, GitHub setzte dann die Tag-Nachricht („Version 1.0.3“, „Co-Authored-By: …“) ein und genau das stand im
   Dialog. `releaseNotesText` filtert solche Zeilen weiterhin heraus (alte Releases); `fullChangelog = true` zeigt die
   Hinweise aller übersprungenen Versionen mit Überschrift. **Commit-Titel landen damit bei den Nutzern:** verständlich formulieren.
+  Interne Commits filtert der Workflow heraus: Titel, die mit `Doku`, `Test`/`Tests`, `CI`, `Intern`, `Release-Vorbereitung`
+  oder `Release-Workflow` beginnen (gefolgt von Leerzeichen oder Doppelpunkt). **Alles andere, was Nutzer nicht betrifft,
+  mit „Intern: “ beginnen** (z. B. Testkorrekturen, deren Titel mit einem anderen Wort anfängt). Anlass: In 1.1.1 stand
+  „Test unter Windows: Hintergrund-Abhilfe verhindert den leisen Audioverlust nicht“ im Dialog – las sich, als wäre der
+  Fehler ungelöst; die Hinweise mussten auf GitHub von Hand ersetzt werden.
 - Tests: `test/updater.test.js` mit nachgebautem `autoUpdater` (Option `autoUpdater` im Konstruktor).
 
 ### Mithören

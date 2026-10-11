@@ -55,7 +55,11 @@ jobs:
         run: |
           PREV=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_REF_NAME^" 2>/dev/null || true)
           RANGE=${PREV:+$PREV..}$GITHUB_REF_NAME
-          git log "$RANGE" --no-merges --pretty='- %s' | grep -v -E '^- Version v?[0-9]+(\.[0-9]+)*$' | awk '!seen[$0]++' > "$RUNNER_TEMP/notes.md" || true
+          # Interne Commits (Doku, Tests, CI, Release-Workflow, Präfix „Intern:“) gehören nicht in den Update-Dialog.
+          git log "$RANGE" --no-merges --pretty='- %s' \
+            | grep -v -E '^- Version v?[0-9]+(\.[0-9]+)*$' \
+            | grep -v -E '^- (Doku|Tests?|CI|Intern|Release-Vorbereitung|Release-Workflow)([: ]|$)' \
+            | awk '!seen[$0]++' > "$RUNNER_TEMP/notes.md" || true
           [ -s "$RUNNER_TEMP/notes.md" ] || echo '- Kleinere Verbesserungen' > "$RUNNER_TEMP/notes.md"
           echo "Seit ${PREV:-Beginn}:"; cat "$RUNNER_TEMP/notes.md"
 
