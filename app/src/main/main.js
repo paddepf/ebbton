@@ -15,6 +15,7 @@ const { Session, slug, dateStamp } = require('./session');
 const { NetServer } = require('./netserver');
 const { Updater } = require('./updater');
 const { createInputLog } = require('./inputlog');
+const { exemptFromTimerThrottling } = require('./timerres');
 const churchtools = require('./churchtools');
 const mp3 = require('./mp3');
 const RoleLogic = require('../shared/roles');
@@ -23,6 +24,7 @@ const { MixerLink } = require('./mixer/link');
 const mixerDiscover = require('./mixer/client').discover;
 
 let win = null;
+let timerExemptPid = 0;   // Renderer-PID, die schon von der Timer-Regel ausgenommen ist (Windows, siehe timerres.js)
 const session = new Session();
 const multitrack = new MultitrackManager();
 const mixer = new MixerLink();
@@ -963,6 +965,22 @@ function createWindow() {
     inputLog.write('error', 'oberflaeche-beendet', { grund: details.reason, exitCode: details.exitCode, status: session.status });
     if (details.reason === 'clean-exit') return;
     setTimeout(() => { if (win && !win.isDestroyed()) win.webContents.reload(); }, 500);
+  });
+
+  // Windows: Oberfläche (Audioerfassung) von der Timer-Regel für Hintergrundfenster ausnehmen, siehe timerres.js.
+  // Nach jedem Laden prüfen, ob der Renderer-Prozess neu ist (Absturz, Neuladen) – die Ausnahme gilt je Prozess.
+  win.webContents.on('did-finish-load', () => {
+    if (process.platform !== 'win32' || !win || win.isDestroyed()) return;
+    const pid = win.webContents.getOSProcessId();
+    if (!pid || pid === timerExemptPid) return;
+    timerExemptPid = pid;
+    exemptFromTimerThrottling(pid).then((r) => {
+      inputLog.write(r.ok ? 'info' : 'error', r.ok ? 'timer-regel-ausgenommen' : 'timer-regel-fehlgeschlagen', { pid, ergebnis: r.detail });
+      if (!r.ok) {
+        timerExemptPid = 0;   // beim nächsten Laden erneut versuchen
+        toast('warn', 'Ebbton konnte sich nicht vor der Windows-Drosselung schützen: Während der Aufnahme das Fenster sichtbar lassen (z. B. Mini-Fenster „immer oben“).');
+      }
+    });
   });
 
   win.on('closed', () => { win = null; });

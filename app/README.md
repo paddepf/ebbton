@@ -420,8 +420,11 @@ nichts davon, nur `luecke-*` bei laufender Spur → Treiber/Gerät liefert zu sp
 Bekannte Ursache: Chromium drosselte Ebbton im Hintergrund (minimiert/verdeckt, ab etwa 5 min) so stark, dass die
 Audioblöcke nur noch stoßweise ankamen und der Wächter neu verband. Seit Oktober 2026 läuft Ebbton deshalb ohne
 Hintergrund-Drosselung. Viele `oberflaeche-haengt`-Zeilen mit `"sichtbar":"hidden"` deuten darauf, dass das nicht greift.
-Unter Windows fehlen trotzdem noch etwa 1–1,5 % Audio, solange Ebbton nicht im Vordergrund ist (minimiert oder
-verdeckt). Das steht in keinem Protokoll und erzeugt keine Warnung – Ebbton während der Aufnahme vorne lassen.
+Unter Windows fehlten trotzdem noch etwa 1–1,5 % Audio, solange Ebbton minimiert oder verdeckt war: Windows 11 gibt
+solchen Programmen keine feine Timer-Auflösung mehr. Ebbton nimmt seine Oberfläche deshalb beim Start davon aus;
+im Protokoll steht dann `timer-regel-ausgenommen` (bei Erfolg mit `control=0x4 state=0x0`). Steht dort
+`timer-regel-fehlgeschlagen`, erscheint auch eine Warnung – dann Ebbton während der Aufnahme sichtbar lassen, am
+einfachsten als Mini-Fenster mit „immer oben“.
 Hing die Oberfläche (`oberflaeche-haengt`), verbindet der Wächter in dieser Runde nicht neu: Die Erfassung lief im
 eigenen Thread weiter, ihre Blöcke kommen gleich nach – Neuverbinden würde sie verwerfen. Folgt trotzdem
 `wiederverbinden-start`, war der Eingang wirklich weg.
@@ -515,6 +518,7 @@ src/main/        Hauptprozess
   netserver.js   WebSocket-Schnittstelle
   updater.js     Updates über GitHub Releases
   inputlog.js    Eingangsprotokoll (logs/eingang.log, siehe „Eingangsprotokoll“)
+  timerres.js    Windows: Oberfläche von der Timer-Regel für Hintergrundfenster ausnehmen
   settings.js    Einstellungen, Token-Verschlüsselung
   multitrack/    Mehrspuraufnahme
     engine.js    Gerät öffnen (audify/ASIO), Pegel, Aussetzer erkennen, Gerät neu öffnen

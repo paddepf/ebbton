@@ -207,6 +207,17 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Verdacht (ungeprüft): Windows drosselt einzelne Threads (Audio-Thread des Renderers), solange das Fenster nicht vorne
   ist; per Prozessabfrage nicht sichtbar. Bis zur Lösung am Kirchen-PC Ebbton im Vordergrund lassen. Geplant:
   Fehlbetragsmessung für Stereo, Ursache auf Thread-Ebene suchen (bzw. Erfassung aus der Oberfläche herauslösen).
+- **Ursache unter Windows: Timer-Regel von Windows 11** (bestätigt 2026-10-11, Kirchen-PC): Windows gewährt minimierten,
+  verdeckten oder unhörbaren Programmen keine feine Timer-Auflösung mehr. Chromium nimmt GPU- und Audio-Prozess davon
+  aus (`ProcessPowerThrottling`: `control=0x4 state=0x0`), den Renderer nicht. Test D (Mini-Fenster „immer oben“, Fokus
+  woanders): +0,01 s – fehlender Fokus allein schadet nicht. Test E (minimiert, alle Ebbton-Prozesse per PowerShell
+  `SetProcessInformation` ausgenommen): −0,09 s statt −4,7 s. **Abhilfe:** `timerres.js` nimmt den Renderer nach jedem
+  Laden aus (`did-finish-load`, `webContents.getOSProcessId()`, neue PID nach Absturz/Neuladen → erneut). Ohne native
+  Abhängigkeit: PowerShell mit kleiner C#-Klasse über `-EncodedCommand` (Skriptdateien sperrt die ExecutionPolicy am
+  Kirchen-PC), asynchron. Ergebnis im Eingangsprotokoll (`timer-regel-ausgenommen` mit `control/state` bzw.
+  `-fehlgeschlagen`), bei Fehlschlag Warnung „Fenster sichtbar lassen“. **Die gepackte App mit diesem Fix ist unter
+  Windows noch nicht getestet** (C# lässt sich am Mac nicht übersetzen; Tests prüfen nur das erzeugte Skript). Nicht
+  geprüft ist auch, ob die Ausnahme den Fall „verdeckt“ (B) ebenso behebt – naheliegend, weil dieselbe Regel greift.
 - `lastChunkAt` wird beim Start gesetzt, sonst stand bei jedem Start `hauptprozess-keine-bloecke` im Protokoll. Ereignisliste und Deutung: `app/README.md`, Abschnitt „Eingangsprotokoll“.
 
 ### Absicherung der Aufnahme (Review Oktober 2026)
