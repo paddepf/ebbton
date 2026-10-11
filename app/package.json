@@ -1,6 +1,6 @@
 {
   "name": "ebbton",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Aufnahmesoftware für Gottesdienste mit ChurchTools-Ablaufplan, Abschnitten und Netzwerksteuerung",
   "main": "src/main/main.js",
   "author": "paddepf",
