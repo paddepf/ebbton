@@ -205,8 +205,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `GetProcessInformation(ProcessPowerThrottling)` nach 30 s und 6 min im Hintergrund: alle electron.exe-Prozesse
   Priorität Normal (GPU AboveNormal), **kein Effizienzmodus** (`state=0x0`) – Prozesspriorität/EcoQoS sind es also nicht.
   Verdacht (ungeprüft): Windows drosselt einzelne Threads (Audio-Thread des Renderers), solange das Fenster nicht vorne
-  ist; per Prozessabfrage nicht sichtbar. Bis zur Lösung am Kirchen-PC Ebbton im Vordergrund lassen. Geplant:
-  Fehlbetragsmessung für Stereo, Ursache auf Thread-Ebene suchen (bzw. Erfassung aus der Oberfläche herauslösen).
+  ist; per Prozessabfrage nicht sichtbar. (Überholt: Ursache war die Timer-Regel, siehe nächster Punkt.)
 - **Ursache unter Windows: Timer-Regel von Windows 11** (bestätigt 2026-10-11, Kirchen-PC): Windows gewährt minimierten,
   verdeckten oder unhörbaren Programmen keine feine Timer-Auflösung mehr. Chromium nimmt GPU- und Audio-Prozess davon
   aus (`ProcessPowerThrottling`: `control=0x4 state=0x0`), den Renderer nicht. Test D (Mini-Fenster „immer oben“, Fokus
@@ -215,9 +214,11 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Laden aus (`did-finish-load`, `webContents.getOSProcessId()`, neue PID nach Absturz/Neuladen → erneut). Ohne native
   Abhängigkeit: PowerShell mit kleiner C#-Klasse über `-EncodedCommand` (Skriptdateien sperrt die ExecutionPolicy am
   Kirchen-PC), asynchron. Ergebnis im Eingangsprotokoll (`timer-regel-ausgenommen` mit `control/state` bzw.
-  `-fehlgeschlagen`), bei Fehlschlag Warnung „Fenster sichtbar lassen“. **Die gepackte App mit diesem Fix ist unter
-  Windows noch nicht getestet** (C# lässt sich am Mac nicht übersetzen; Tests prüfen nur das erzeugte Skript). Nicht
-  geprüft ist auch, ob die Ausnahme den Fall „verdeckt“ (B) ebenso behebt – naheliegend, weil dieselbe Regel greift.
+  `-fehlgeschlagen`), bei Fehlschlag Warnung „Fenster sichtbar lassen“. **Geprüft am Kirchen-PC** (6d9888e, Entwicklung,
+  nicht gepackt): Renderer ausgenommen ohne Zutun (`control=0x4 state=0x0`, auch nach 6 min im Hintergrund), minimiert
+  −0,01 s (vorher −4,7), verdeckt −0,02 s (vorher −6,8). Neuladen behält die PID (nichts zu tun); nach einem
+  abgeschossenen Renderer wurde die neue PID 5 s später ausgenommen. Der erste Aufruf nach dem App-Start dauerte etwa
+  18 s (PowerShell übersetzt die C#-Klasse); wer in dieser Zeit schon aufnimmt und minimiert, verliert dort noch etwas.
 - **Fehlbetragsmessung (Stereo)** (`deficit.js`, `DeficitMeter`; Takt im Hauptprozess jede Sekunde): vergangene Zeit
   minus aufgenommene Dauer, Pausen ausgenommen, Messbeginn erst beim ersten neuen Block nach Start/Fortsetzen (sonst
   ~0,1 s Übertragungszeit als Dauer-Fehlbetrag). Gemeldet wird das **Minimum der letzten 10 Messungen** – Blöcke, die
