@@ -377,7 +377,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Zielnamen werden vorab vergeben (`freeFilePath(p, taken)`), sonst bekämen zwei gleich benannte Abschnitte dieselbe Datei.
   Gemessen (Mac, 10 min ganz + 4 Abschnitte, mit Lautheit): vorher etwa 48 s, jetzt 7 s; die Dauer bestimmt jetzt
   „Gesamte Aufnahme“ allein (eine MP3 in Stücken parallel zu codieren gäbe an den Nähten Lücken durch Encoder-Verzögerung).
-  Geprüft: Ergebnis identisch mit/ohne Threads, −16,3 LUFS, Threads aus der gepackten `app.asar`. **Am Kirchen-PC nicht gemessen.**
+  Geprüft: Ergebnis identisch mit/ohne Threads, −16,3 LUFS, Threads aus der gepackten `app.asar`. Am Kirchen-PC getestet (2026-10-19): deutlich schneller, keine Probleme.
 - Gesicherte Abschnitte werden in der Session gemerkt (`exports`, Schlüssel =
   Segment-ID, mit Datei und Zeitraum). Weichen Anfang/Ende später ab, zeigt die
   Liste „geändert seit Export“. `exports` wird bei einer neuen Aufnahme geleert.
