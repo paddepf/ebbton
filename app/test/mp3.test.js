@@ -35,3 +35,43 @@ test('Fehlschlag hinterlässt keine halbe Datei', async () => {
   await assert.rejects(mp3.exportSegment({ wavPath: path.join(dir, 'fehlt.wav'), start: 0, end: 1, outPath: path.join(dir, 'x.mp3') }));
   assert.equal(fs.existsSync(path.join(dir, 'x.mp3')), false);
 });
+
+test('Pool exportiert parallel in Threads, Fehler stoppen die übrigen nicht', async () => {
+  const mp3pool = require(src('main/mp3pool'));
+  const dir = tmpDir();
+  const p = path.join(dir, 'b.wav');
+  const w = new wav.WavWriter(p, 48000, 2);
+  w.write(tone(12));
+  await w.close();
+  const jobs = [
+    { wavPath: p, start: 0, end: 4, outPath: path.join(dir, '1.mp3'), tags: { title: 'Eins' } },
+    { wavPath: path.join(dir, 'fehlt.wav'), start: 0, end: 1, outPath: path.join(dir, 'x.mp3') },
+    { wavPath: p, start: 2, end: 12, outPath: path.join(dir, '2.mp3'), loudness: { target: -16 } }
+  ];
+  const seen = [];
+  const progress = [];
+  const results = await mp3pool.exportAll(jobs, {
+    concurrency: 3,
+    onResult: (i, result) => seen.push([i, !!result]),
+    onProgress: ({ progress: x }) => progress.push(x)
+  });
+  assert.equal(results[0].result.duration, 4);
+  assert.match(results[1].error.message, /nicht gefunden/);
+  assert.equal(results[2].result.duration, 10);
+  assert.ok(results[2].result.loudness);
+  assert.equal(fs.existsSync(path.join(dir, 'x.mp3')), false);
+  assert.deepEqual(seen.sort(), [[0, true], [1, false], [2, true]]);
+  assert.ok(progress.every((x, k) => x >= 0 && x < 1 && (k === 0 || x >= progress[k - 1] - 1e-9)));
+});
+
+test('Pool ohne Threads (Rückfall) liefert dasselbe', async () => {
+  const mp3pool = require(src('main/mp3pool'));
+  const dir = tmpDir();
+  const p = path.join(dir, 'c.wav');
+  const w = new wav.WavWriter(p, 48000, 1);
+  w.write(tone(1.5));   // Stereo-Bytes von 1,5 s = 3 s Mono
+  await w.close();
+  const [r] = await mp3pool.exportAll([{ wavPath: p, start: 0, end: 3, outPath: path.join(dir, 'm.mp3') }], { useWorkers: false });
+  assert.equal(r.result.duration, 3);
+  assert.equal(fs.readFileSync(path.join(dir, 'm.mp3'))[0], 0xff);
+});

@@ -2552,10 +2552,12 @@
 
     window.api.on('update-status', (s) => applyUpdateStatus(s));
 
-    window.api.on('export-progress', ({ progress, index, total }) => {
+    window.api.on('export-progress', ({ progress, done, total }) => {
       const bars = [$('export-progress'), $('ce-progress')];
       bars.forEach((bar) => { bar.hidden = false; bar.querySelector('i').style.width = Math.round(progress * 100) + '%'; });
-      if (total && progress < 1) setExportResult(`MP3 ${index} von ${total} wird erstellt …`);
+      if (total && progress < 1) {
+        setExportResult(total === 1 ? 'MP3 wird erstellt …' : `MP3-Dateien werden erstellt … ${done || 0} von ${total} fertig`);
+      }
       if (progress >= 1) setTimeout(() => { bars.forEach((bar) => { bar.hidden = true; }); }, 800);
     });
   }

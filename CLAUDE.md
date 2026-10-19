@@ -364,10 +364,20 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `rect` = Fähnchen in Zeichenflächen-Koordinaten).
 - Ausgewählt wird in der Liste „Ablauf“ (nach dem Beenden Häkchen je fertigem Abschnitt plus Zeile „Gesamte
   Aufnahme“, `fullRow`); der Knopf `#btn-export` steht als Hauptaktion im Transport und nennt, was gespeichert wird
-  („2 Abschnitte als MP3 sichern“, „Alles gesichert ✓“; `updateExportButton`; `export:batch`, nacheinander, ein Fehler
+  („2 Abschnitte als MP3 sichern“, „Alles gesichert ✓“; `updateExportButton`; `export:batch`, gleichzeitig in Threads (siehe „Schneller Export“), ein Fehler
   stoppt die übrigen nicht, `failed` in der Antwort). Vorausgewählt sind Abschnitte, die noch nicht gesichert
   wurden; **beim Beenden einer Aufnahme alle**, ohne Abschnitte die ganze Aufnahme (`prepareExportSelection`,
   `exportPrevStatus` erkennt den Wechsel recording/paused → stopped). Fortschritt über `export-progress` mit `index`/`total`.
+- **Schneller Export (2026-10-19, Wunsch des Nutzers: Export am Ende zu langsam):** Encoder ist LAME als WebAssembly
+  (`wasm-media-encoders`, MIT; WASM als base64 im Paket, läuft aus `app.asar`) statt des reinen JavaScript-`lamejs`:
+  10 min Stereo in 5,6 s statt 22 s (Mac). Der Encoder bekommt Gleitkomma (Int16 / 32768) in Stücken von etwa 1 s;
+  `encode()` liefert einen Ausschnitt des WASM-Speichers, der kopiert werden muss. Dazu `mp3pool.js`: je Datei ein
+  Worker (eval-Quelltext lädt `mp3.js` über den absoluten Pfad, wie der Schreib-Thread), bis zu 4 gleichzeitig (Kerne − 1),
+  längste zuerst. Lässt sich kein Worker starten, läuft der Export im Hauptprozess (Rückfall, Meldung in der Konsole).
+  Zielnamen werden vorab vergeben (`freeFilePath(p, taken)`), sonst bekämen zwei gleich benannte Abschnitte dieselbe Datei.
+  Gemessen (Mac, 10 min ganz + 4 Abschnitte, mit Lautheit): vorher etwa 48 s, jetzt 7 s; die Dauer bestimmt jetzt
+  „Gesamte Aufnahme“ allein (eine MP3 in Stücken parallel zu codieren gäbe an den Nähten Lücken durch Encoder-Verzögerung).
+  Geprüft: Ergebnis identisch mit/ohne Threads, −16,3 LUFS, Threads aus der gepackten `app.asar`. **Am Kirchen-PC nicht gemessen.**
 - Gesicherte Abschnitte werden in der Session gemerkt (`exports`, Schlüssel =
   Segment-ID, mit Datei und Zeitraum). Weichen Anfang/Ende später ab, zeigt die
   Liste „geändert seit Export“. `exports` wird bei einer neuen Aufnahme geleert.
@@ -734,7 +744,7 @@ Der Ordnername des lokalen Klons ist egal.
   Codieren mit fester Verstärkung (höchstens +20 dB, Stille wird nicht angehoben) und Begrenzer auf −1 dBFS (Sample-Peak):
   Verstärkung an den Blockgrenzen, linear dazwischen, vorausschauend ~6 dB je Block absenken, 20 dB/s zurück. Jede Datei
   für sich (nicht über alle Abschnitte gemeinsam). Kostet etwa 25 % mehr Exportzeit; die Messung gibt alle 5 s Audio
-  den Hauptprozess frei. Geprüft: ffmpeg `ebur128` misst eine exportierte Datei mit −16,3 LUFS.
+  den Thread frei (läuft sie im Rückfall im Hauptprozess, bleibt der so bedienbar). Geprüft: ffmpeg `ebur128` misst eine exportierte Datei mit −16,3 LUFS.
 - **Lautheit in der Wellenform** (Schalter „LUFS“, Einstellung `loudnessMonitor`, Vorgabe an): Der Hauptprozess misst
   beim Stereo-Aufnehmen mit (`Session._measureLoudness` in `pushAudio`, `LoudnessMeter` aus `loudness.js`) und legt je
   100 ms einen Wert ab (`session.loudness`, LUFS mit 0,1 dB, `null` = Stille; in der Session-Datei als `loudness`).

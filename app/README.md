@@ -513,7 +513,8 @@ src/main/        Hauptprozess
   main.js        Fenster, IPC, Verdrahtung
   session.js     Zustand, Abschnitte, Aufnahme/Fortsetzen, Autosave
   wav.js         WAV/RF64 schreiben (eigener Thread), lesen, Cue-Marker (Abschnitte) eintragen
-  mp3.js         MP3-Export eines Abschnitts
+  mp3.js         MP3-Export eines Abschnitts (LAME als WebAssembly)
+  mp3pool.js     mehrere MP3-Exporte gleichzeitig in eigenen Threads
   loudness.js    Lautheit messen (LUFS) und Spitzen begrenzen für den Export
   id3.js         ID3-Tags (Titel, Interpret, Album, Jahr)
   churchtools.js ChurchTools-API

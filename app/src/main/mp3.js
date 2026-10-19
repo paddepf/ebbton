@@ -5,31 +5,23 @@ const wav = require('./wav');
 const { buildId3v2 } = require('./id3');
 const { LoudnessMeter, limiterGains, PEAK_BLOCK } = require('./loudness');
 
-let cachedEncoder = null;
 const READ_SECONDS = 30;   // so viele Sekunden werden beim Export jeweils aus der WAV gelesen
+const ENCODE_FRAMES = 1152 * 40;   // so viele Frames gehen je Aufruf an den Encoder (etwa 1 s)
 
 /**
- * Lädt den MP3-Encoder. Das Paket wird nur als ES-Modul ausgeliefert,
- * daher der dynamische Import; das klassische lamejs dient als Rückfallebene.
+ * Legt einen MP3-Encoder an: LAME als WebAssembly (wasm-media-encoders), etwa viermal so schnell wie das
+ * frühere lamejs. Das WASM steckt als base64 im Paket, läuft also auch aus app.asar heraus.
  */
-async function loadEncoder() {
-  if (cachedEncoder) return cachedEncoder;
-
-  let lib = null;
+async function createEncoder(channels, sampleRate, bitrate) {
+  let lib;
   try {
-    lib = await import('@breezystack/lamejs');
+    lib = require('wasm-media-encoders');
   } catch {
-    try {
-      lib = require('lamejs');
-    } catch {
-      throw new Error('MP3-Encoder nicht gefunden. Bitte "npm install" ausführen.');
-    }
+    throw new Error('MP3-Encoder nicht gefunden. Bitte "npm install" ausführen.');
   }
-
-  const Mp3Encoder = lib.Mp3Encoder || (lib.default && lib.default.Mp3Encoder);
-  if (typeof Mp3Encoder !== 'function') throw new Error('MP3-Encoder konnte nicht geladen werden.');
-  cachedEncoder = Mp3Encoder;
-  return Mp3Encoder;
+  const encoder = await lib.createMp3Encoder();
+  encoder.configure({ channels, sampleRate, bitrate });
+  return encoder;
 }
 
 /**
@@ -138,7 +130,6 @@ async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags
   const pieces = keepRanges(start, end, skip);
   if (pieces.length === 0) throw new Error('Der gewählte Abschnitt besteht nur aus Schnitten.');
 
-  const Mp3Encoder = await loadEncoder();
   const info = wav.readInfo(wavPath);
   const channels = info.channels;
   const rate = info.sampleRate;
@@ -152,21 +143,21 @@ async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags
     ? await analyseLoudness(wavPath, info, frameRanges, totalFrames, loudness, onProgress && ((p) => onProgress(p * share)))
     : null;
 
-  const encoder = new Mp3Encoder(channels >= 2 ? 2 : 1, rate, bitrate);
-  const blockSize = 1152;
-  const left = new Int16Array(blockSize);
-  const right = new Int16Array(blockSize);
+  const outChannels = channels >= 2 ? 2 : 1;
+  const encoder = await createEncoder(outChannels, rate, bitrate);
+  const left = new Float32Array(ENCODE_FRAMES);
+  const right = new Float32Array(ENCODE_FRAMES);
 
-  /** Sample n des Ergebnisses mit Verstärkung und Begrenzer (linear zwischen den Blockgrenzen). */
+  /** Sample n des Ergebnisses (Int16) als Gleitkommawert, mit Verstärkung und Begrenzer (linear zwischen den Blockgrenzen). */
   const shape = level
     ? (v, n) => {
       const k = Math.floor(n / PEAK_BLOCK);
       const t = (n - k * PEAK_BLOCK) / PEAK_BLOCK;
       const g = level.gain * (level.limits[k] + (level.limits[k + 1] - level.limits[k]) * t);
       const x = Math.round(v * g);
-      return x > 32767 ? 32767 : (x < -32768 ? -32768 : x);
+      return (x > 32767 ? 32767 : (x < -32768 ? -32768 : x)) / 32768;
     }
-    : (v) => v;
+    : (v) => v / 32768;
 
   const out = fs.createWriteStream(outPath);
   let streamError = null;
@@ -180,27 +171,28 @@ async function exportSegment({ wavPath, start, end, outPath, bitrate = 192, tags
     const id3 = buildId3v2(tags);
     if (id3.length > 0) out.write(id3);
 
-    let blocks = 0;
+    let calls = 0;
     for (const { samples, frames, offset } of readPieces(wavPath, info, frameRanges)) {
-      for (let i = 0; i < frames; i += blockSize) {
-        const n = Math.min(blockSize, frames - i);
+      for (let i = 0; i < frames; i += ENCODE_FRAMES) {
+        const n = Math.min(ENCODE_FRAMES, frames - i);
         for (let j = 0; j < n; j++) {
           const base = (i + j) * channels;
           const pos = offset + i + j;
           left[j] = shape(samples[base], pos);
-          right[j] = channels >= 2 ? shape(samples[base + 1], pos) : left[j];
+          if (outChannels === 2) right[j] = shape(samples[base + 1], pos);
         }
-        const l = n === blockSize ? left : left.subarray(0, n);
-        const r = n === blockSize ? right : right.subarray(0, n);
-        writeChunk(channels >= 2 ? encoder.encodeBuffer(l, r) : encoder.encodeBuffer(l));
+        const l = n === ENCODE_FRAMES ? left : left.subarray(0, n);
+        const r = n === ENCODE_FRAMES ? right : right.subarray(0, n);
+        // encode() liefert einen Ausschnitt des WASM-Speichers, der beim nächsten Aufruf überschrieben wird: kopieren.
+        writeChunk(encoder.encode(outChannels === 2 ? [l, r] : [l]));
 
-        blocks += 1;
-        if (onProgress && blocks % 200 === 0) onProgress(share + (1 - share) * Math.min(0.99, (offset + i) / totalFrames));
-        if (blocks % 400 === 0) await tick();
+        calls += 1;
+        if (onProgress && calls % 5 === 0) onProgress(share + (1 - share) * Math.min(0.99, (offset + i + n) / totalFrames));
+        if (calls % 10 === 0) await tick();
       }
     }
 
-    writeChunk(encoder.flush());
+    writeChunk(encoder.finalize());
     await new Promise((resolve, reject) => {
       if (streamError) return reject(streamError);
       out.once('error', reject);

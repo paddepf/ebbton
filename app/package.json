@@ -17,9 +17,9 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@breezystack/lamejs": "^1.2.7",
     "audify": "1.10.1",
     "electron-updater": "^6.8.9",
+    "wasm-media-encoders": "^0.7.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {

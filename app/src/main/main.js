@@ -18,7 +18,7 @@ const { createInputLog } = require('./inputlog');
 const { exemptFromTimerThrottling } = require('./timerres');
 const { DeficitMeter } = require('./deficit');
 const churchtools = require('./churchtools');
-const mp3 = require('./mp3');
+const mp3pool = require('./mp3pool');
 const RoleLogic = require('../shared/roles');
 const { MultitrackManager } = require('./multitrack/manager');
 const { MixerLink } = require('./mixer/link');
@@ -1578,12 +1578,13 @@ function exportSubfolderName() {
 }
 
 /** Hängt " (2)", " (3)" … an, damit ein früherer Export nie überschrieben wird. */
-function freeFilePath(filePath) {
-  if (!fs.existsSync(filePath)) return filePath;
+function freeFilePath(filePath, taken = new Set()) {
+  const free = (p) => !fs.existsSync(p) && !taken.has(p);
+  if (free(filePath)) return filePath;
   const { dir, name, ext } = path.parse(filePath);
   for (let n = 2; ; n++) {
     const candidate = path.join(dir, `${name} (${n})${ext}`);
-    if (!fs.existsSync(candidate)) return candidate;
+    if (free(candidate)) return candidate;
   }
 }
 
@@ -1632,10 +1633,9 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
     }
     fs.mkdirSync(folder, { recursive: true });
 
-    const files = [];
-    const failed = [];
-    for (let i = 0; i < items.length; i++) {
-      const { id, start, end, label } = items[i];
+    // Zielnamen vorab vergeben: Die Exporte laufen gleichzeitig, zwei gleich benannte bekämen sonst dieselbe Datei.
+    const reserved = new Set();
+    const jobs = items.map(({ id, start, end, label }) => {
       const cuts = session.cutsWithin(start, end);
       const section = session.sections.find((x) => `seg_${x.id}` === id);
       const tags = {
@@ -1644,27 +1644,43 @@ ipcMain.handle('export:batch', async (_e, { items } = {}) => {
         album: session.service.date || '',
         year: String(session.service.date || '').slice(0, 4)
       };
-      try {
-        const result = await mp3.exportSegment({
-          wavPath: session.wavPath,
-          start,
-          end,
-          outPath: freeFilePath(path.join(folder, buildFileName(label, tags.artist))),
-          bitrate: settings.get('mp3Bitrate') || 192,
-          tags,
-          skip: cuts,
-          loudness: loudnessTarget() ? { target: loudnessTarget(), ceilingDb: -1 } : null,
-          onProgress: (p) => send('export-progress', { progress: (i + p) / items.length, index: i + 1, total: items.length })
-        });
-        files.push(result.outPath);
+      const outPath = freeFilePath(path.join(folder, buildFileName(label, tags.artist)), reserved);
+      reserved.add(outPath);
+      return {
+        wavPath: session.wavPath,
+        start,
+        end,
+        outPath,
+        bitrate: settings.get('mp3Bitrate') || 192,
+        tags,
+        skip: cuts,
+        loudness: loudnessTarget() ? { target: loudnessTarget(), ceilingDb: -1 } : null
+      };
+    });
+
+    let lastProgress = 0;
+    const results = await mp3pool.exportAll(jobs, {
+      onProgress: ({ progress, done, total }) => {
+        const now = Date.now();
+        if (now - lastProgress < 100) return;   // mehrere Threads melden gleichzeitig: höchstens 10-mal je Sekunde
+        lastProgress = now;
+        send('export-progress', { progress, done, total, index: Math.min(total, done + 1) });
+      },
+      onResult: (i, result) => {
+        if (!result) return;
+        const { id, start, end, label } = items[i];
         revealable.add(path.resolve(result.outPath));
-        if (id) session.recordExport(id, { file: result.outPath, start, end, cuts });
+        if (id) session.recordExport(id, { file: result.outPath, start, end, cuts: jobs[i].skip });
         net.publishEvent('export.finished', { file: result.outPath, label });
-      } catch (err) {
-        failed.push({ id, label, error: String(err?.message || err) });
       }
-    }
-    send('export-progress', { progress: 1, index: items.length, total: items.length });
+    });
+    const files = [];
+    const failed = [];
+    results.forEach(({ result, error }, i) => {
+      if (result) files.push(result.outPath);
+      else failed.push({ id: items[i].id, label: items[i].label, error: String(error?.message || error) });
+    });
+    send('export-progress', { progress: 1, done: items.length, index: items.length, total: items.length });
     return ok({ folder, files, failed });
   } catch (err) {
     return fail(err);
