@@ -351,6 +351,9 @@ unabhängig und sieht immer gleich aus.
   `churchtools-<Termin>-<Zeit>.json` in den Ordner `logs` des Programmordners und zeigt die Datei. Der Token steht nicht
   darin, Personennamen schon – die Datei nicht weitergeben. Gedacht für den Fall, dass Interpreten oder Infotext nicht
   ankommen: Dort sieht man, unter welchen Feldern ChurchTools sie wirklich liefert.
+- **ChurchTools vorübergehend nicht erreichbar (Fehler 502/503/504):** Störung oder Wartung beim Anbieter, nicht in
+  Ebbton. Aufnehmen geht trotzdem: Gottesdienst im Termin-Dialog von Hand eintragen und den Ablauf aus einer Vorlage
+  wählen.
 - **Beenden:** Beim Schließen während einer Aufnahme fragt die App nach, ohne die Aufnahme dabei
   anzuhalten, und schließt erst, wenn die Datei vollständig geschrieben ist.
 - **Pause:** In der Pause sind Timer, Fensterrand und Pause-Knopf gelb; derselbe Knopf (jetzt ▶) setzt fort.

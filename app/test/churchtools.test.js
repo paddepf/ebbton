@@ -110,3 +110,8 @@ test('rawDump: stellt dieselben Anfragen, Fehler brechen nicht ab, Personen nur 
   assert.equal(dump.anfragen[1].status, 404);
   assert.match(dump.anfragen[1].fehler, /404/);
 });
+
+test('503 (Störung beim Anbieter): verständliche Meldung mit Hinweis auf die Vorlage', async () => {
+  global.fetch = async () => ({ ok: false, status: 503, json: async () => { throw new SyntaxError('html'); } });
+  await assert.rejects(ct.listCalendars(), (err) => err.status === 503 && /vorübergehend nicht erreichbar/.test(err.message) && /Vorlage/.test(err.message));
+});

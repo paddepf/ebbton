@@ -451,6 +451,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   laufende bzw. nächste (Ende oder +2 h). Der Termin-Dialog zeigt die letzten und
   kommenden 5 Termine. ChurchTools liefert **UTC**; Zeit und Datum werden in
   Ortszeit umgerechnet (`withLocalTime`).
+- **502/503/504 = Störung beim Anbieter, nicht bei Ebbton** (2026-10-21: ChurchTools sperrte alle Instanzen wegen einer
+  PHP-Lücke, auch die API, Wartungsseite mit `retry-after: 60`; nach dem Update auf 1.1.3 hielt der Nutzer es für einen
+  App-Fehler). `requestRaw` meldet dann „vorübergehend nicht erreichbar … Ablauf aus einer Vorlage wählen“ statt nur
+  „Fehler 503“ (`err.status` bleibt). Prüfen ohne Token: `curl -I <Adresse>/api/info`.
 
 ### Oberfläche
 - **Mini-Fenster** (`setCompact` in `main.js`, IPC `window:compact`, Ereignis `compact`): dasselbe Fenster,

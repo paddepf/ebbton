@@ -61,6 +61,13 @@ async function requestRaw(pathname, params) {
     if (res.status === 401 || res.status === 403) {
       throw new Error('ChurchTools hat den Zugriff abgelehnt. Bitte Token prüfen.');
     }
+    if (res.status === 502 || res.status === 503 || res.status === 504) {
+      // Störung oder Sperre beim Anbieter (so im Oktober 2026: alle Instanzen wegen einer PHP-Lücke gesperrt).
+      const err = new Error(`ChurchTools ist vorübergehend nicht erreichbar (Fehler ${res.status}, Störung beim Anbieter). ` +
+        'Gottesdienst von Hand eintragen und den Ablauf aus einer Vorlage wählen.');
+      err.status = res.status;
+      throw err;
+    }
     if (!res.ok) {
       const err = new Error(`ChurchTools meldet Fehler ${res.status}.`);
       err.status = res.status;
