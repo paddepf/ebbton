@@ -19,7 +19,7 @@ test('Timer-Regel: PowerShell-Skript mit Here-String und PID, ohne Skriptdatei',
     platform: 'win32',
     run: (_exe, a, _opts, cb) => { args = a; cb(null, 'ok control=0x4 state=0x0\r\n', ''); }
   });
-  assert.deepStrictEqual(r, { ok: true, detail: 'ok control=0x4 state=0x0' });
+  assert.deepStrictEqual({ ok: r.ok, detail: r.detail }, { ok: true, detail: 'ok control=0x4 state=0x0' });
   assert.ok(!args.includes('-File'));
   const script = decode(args[args.indexOf('-EncodedCommand') + 1]);
   assert.match(script, /Add-Type -TypeDefinition @'\n/);
@@ -41,4 +41,24 @@ test('Timer-Regel: Fehler werden gemeldet, nie geworfen', async () => {
 
 test('Timer-Regel: PID wird als Zahl eingesetzt (kein Text aus fremder Quelle im Skript)', () => {
   assert.match(decode(encodedCommand('12; Remove-Item x')), /Apply\(0\)$/);
+});
+
+test('Timer-Regel: mit Zwischenspeicher wird die DLL geladen, sonst übersetzt und abgelegt', async () => {
+  const { cachedAssemblyPath } = require('../src/main/timerres');
+  const dir = "C:\\Users\\O'Brien\\AppData\\Roaming\\ebbton\\cache";
+  let args = null;
+  const r = await exemptFromTimerThrottling(77, {
+    platform: 'win32', cacheDir: dir,
+    run: (_exe, a, _opts, cb) => { args = a; cb(null, 'ok control=0x4 state=0x0 weg=zwischenspeicher\r\n', ''); }
+  });
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(typeof r.ms, 'number');
+  const dll = cachedAssemblyPath(dir);
+  assert.match(dll, /EbbtonTimerRes-[0-9a-f]{10}\.dll$/);
+  const script = decode(args[args.indexOf('-EncodedCommand') + 1]);
+  assert.ok(script.includes(`$dll = '${dll.replace(/'/g, "''")}'`));   // Apostroph im Pfad verdoppelt
+  assert.match(script, /try \{ Add-Type -Path \$dll \}/);
+  assert.match(script, /-OutputAssembly \$tmp/);
+  assert.match(script, /\$quelle = @'\n[\s\S]*\n'@\n/);
+  assert.match(script, /\[EbbtonTimerRes\]::Apply\(77\) \+ ' weg=' \+ \$weg$/);
 });

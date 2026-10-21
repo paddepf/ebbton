@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
     test: () => invoke('ct:test'),
     services: (range) => invoke('ct:services', range),
     calendars: () => invoke('ct:calendars'),
+    dump: () => invoke('ct:dump'),
     agenda: (params) => invoke('ct:agenda', params)
   },
 

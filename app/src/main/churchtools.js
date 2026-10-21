@@ -290,9 +290,37 @@ async function listCalendars() {
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'de'));
 }
 
+/**
+ * Rohantworten zu einem Termin für die Fehlersuche: genau die Anfragen, die `agenda` und `eventServices` stellen,
+ * unverändert. Die Antwortform ist nicht gegen eine echte Instanz geprüft (siehe CLAUDE.md); mit dieser Datei lässt
+ * sich nachsehen, wo Personen, Dienste und Infotext wirklich stehen. Ein Fehler bei einer Anfrage bricht die übrigen
+ * nicht ab. Der Token steht nicht darin.
+ */
+async function rawDump(eventId, { requester = requestRaw } = {}) {
+  const queries = [
+    [`/api/events/${eventId}`, { include: 'eventServices' }],
+    [`/api/events/${eventId}/agenda`, null],
+    ['/api/services', null]
+  ];
+  const out = { erstellt: new Date().toISOString(), adresse: baseUrl(), termin: eventId, anfragen: [] };
+  const run = async (pfad, params) => {
+    try {
+      out.anfragen.push({ pfad, params, antwort: await requester(pfad, params) });
+    } catch (err) {
+      out.anfragen.push({ pfad, params, fehler: err.message, status: err.status ?? null });
+    }
+  };
+  for (const [pfad, params] of queries) await run(pfad, params);
+  // Personen, die die Dienstplanung nur als Id nennt (höchstens drei, als Beispiel für die Form).
+  const event = out.anfragen[0].antwort?.data;
+  const ids = [...new Set((event?.eventServices || []).filter((es) => !es.person && es.personId).map((es) => es.personId))];
+  for (const id of ids.slice(0, 3)) await run(`/api/persons/${id}`, null);
+  return out;
+}
+
 /** Zwischenspeicher leeren, z. B. nach geänderter Adresse oder geändertem Token. */
 function resetCache() {
   servicesCache = null;
 }
 
-module.exports = { test, listServices, listCalendars, todaysServices, agenda, eventServices, eventInfoText, typoQuotes, resetCache, isoDate };
+module.exports = { test, listServices, listCalendars, todaysServices, agenda, eventServices, eventInfoText, rawDump, typoQuotes, resetCache, isoDate };

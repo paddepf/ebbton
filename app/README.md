@@ -346,6 +346,11 @@ unabhängig und sieht immer gleich aus.
 
 - **Kalender:** Unter Einstellungen → ChurchTools lassen sich die Kalender wählen, deren Termine in der Auswahl
   erscheinen (ohne Häkchen: alle); die Liste lädt beim Öffnen des Reiters von selbst.
+- **Fehlersuche ChurchTools:** „Antworten zum Termin speichern“ (Einstellungen → ChurchTools) schreibt, was
+  ChurchTools zum gewählten Gottesdienst liefert (Termin mit Dienstplanung, Ablaufplan, Dienste, Beispielpersonen), als
+  `churchtools-<Termin>-<Zeit>.json` in den Ordner `logs` des Programmordners und zeigt die Datei. Der Token steht nicht
+  darin, Personennamen schon – die Datei nicht weitergeben. Gedacht für den Fall, dass Interpreten oder Infotext nicht
+  ankommen: Dort sieht man, unter welchen Feldern ChurchTools sie wirklich liefert.
 - **Beenden:** Beim Schließen während einer Aufnahme fragt die App nach, ohne die Aufnahme dabei
   anzuhalten, und schließt erst, wenn die Datei vollständig geschrieben ist.
 - **Pause:** In der Pause sind Timer, Fensterrand und Pause-Knopf gelb; derselbe Knopf (jetzt ▶) setzt fort.
@@ -424,7 +429,9 @@ Audioblöcke nur noch stoßweise ankamen und der Wächter neu verband. Seit Okto
 Hintergrund-Drosselung. Viele `oberflaeche-haengt`-Zeilen mit `"sichtbar":"hidden"` deuten darauf, dass das nicht greift.
 Unter Windows fehlten trotzdem noch etwa 1–1,5 % Audio, solange Ebbton minimiert oder verdeckt war: Windows 11 gibt
 solchen Programmen keine feine Timer-Auflösung mehr. Ebbton nimmt seine Oberfläche deshalb beim Start davon aus;
-im Protokoll steht dann `timer-regel-ausgenommen` (bei Erfolg mit `control=0x4 state=0x0`). Steht dort
+im Protokoll steht dann `timer-regel-ausgenommen` (bei Erfolg mit `control=0x4 state=0x0`, dazu `weg` und `dauerMs`:
+`zwischenspeicher` = Hilfsklasse aus `cache/EbbtonTimerRes-….dll` geladen, `neu-uebersetzt` = einmalig übersetzt und
+abgelegt, `speicher` = Ablegen ging nicht, jedes Mal neu übersetzt). Steht dort
 `timer-regel-fehlgeschlagen`, erscheint auch eine Warnung – dann Ebbton während der Aufnahme sichtbar lassen, am
 einfachsten als Mini-Fenster mit „immer oben“.
 Hing die Oberfläche (`oberflaeche-haengt`), verbindet der Wächter in dieser Runde nicht neu: Die Erfassung lief im

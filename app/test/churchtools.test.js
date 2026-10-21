@@ -89,3 +89,21 @@ test('404 trägt den Status, kaputte Antwort eine klare Meldung', async () => {
   global.fetch = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('x'); } });
   await assert.rejects(ct.listCalendars(), /keine gültige Antwort/);
 });
+
+test('rawDump: stellt dieselben Anfragen, Fehler brechen nicht ab, Personen nur mit Id', async () => {
+  setSettings({ churchToolsUrl: 'https://beispiel.church.tools/' });
+  const asked = [];
+  const dump = await ct.rawDump(42, {
+    requester: async (pfad, params) => {
+      asked.push(pfad);
+      if (pfad.endsWith('/agenda')) { const e = new Error('ChurchTools meldet Fehler 404.'); e.status = 404; throw e; }
+      if (pfad === '/api/events/42') return { data: { id: 42, eventServices: [{ personId: 7 }, { personId: 7 }, { person: { firstName: 'A' }, personId: 8 }] } };
+      return { data: [] };
+    }
+  });
+  assert.deepEqual(asked, ['/api/events/42', '/api/events/42/agenda', '/api/services', '/api/persons/7']);
+  assert.equal(dump.adresse, 'https://beispiel.church.tools');
+  assert.deepEqual(dump.anfragen[0].params, { include: 'eventServices' });
+  assert.equal(dump.anfragen[1].status, 404);
+  assert.match(dump.anfragen[1].fehler, /404/);
+});

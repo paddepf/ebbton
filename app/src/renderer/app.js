@@ -3791,6 +3791,12 @@
         ? `Verbunden als ${res.name}.`
         : res.error;
     });
+    $('btn-ct-dump').addEventListener('click', async () => {
+      $('ct-dump-result').textContent = 'Wird geladen …';
+      const res = await window.api.churchtools.dump();
+      $('ct-dump-result').textContent = !res.ok ? res.error
+        : res.failed ? `Gespeichert, ${res.failed} Anfrage(n) mit Fehler.` : 'Gespeichert.';
+    });
 
     $('btn-check-update').addEventListener('click', async () => {
       const res = await window.api.update.check();

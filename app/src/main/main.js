@@ -1004,8 +1004,8 @@ function createWindow() {
     const pid = win.webContents.getOSProcessId();
     if (!pid || pid === timerExemptPid) return;
     timerExemptPid = pid;
-    exemptFromTimerThrottling(pid).then((r) => {
-      inputLog.write(r.ok ? 'info' : 'error', r.ok ? 'timer-regel-ausgenommen' : 'timer-regel-fehlgeschlagen', { pid, ergebnis: r.detail });
+    exemptFromTimerThrottling(pid, { cacheDir: path.join(app.getPath('userData'), 'cache') }).then((r) => {
+      inputLog.write(r.ok ? 'info' : 'error', r.ok ? 'timer-regel-ausgenommen' : 'timer-regel-fehlgeschlagen', { pid, ergebnis: r.detail, dauerMs: r.ms });
       if (!r.ok) {
         timerExemptPid = 0;   // beim nächsten Laden erneut versuchen
         toast('warn', 'Ebbton konnte sich nicht vor der Windows-Drosselung schützen: Während der Aufnahme das Fenster sichtbar lassen (z. B. Mini-Fenster „immer oben“).');
@@ -1301,6 +1301,22 @@ ipcMain.handle('settings:chooseFile', async (_e, { title, filters }) => {
 
 ipcMain.handle('ct:test', async () => {
   try { return ok(await churchtools.test()); } catch (err) { return fail(err); }
+});
+
+// Fehlersuche: Rohantworten zum Termin der angezeigten Aufnahme nach userData/logs schreiben und im Ordner zeigen.
+ipcMain.handle('ct:dump', async () => {
+  const eventId = session.service?.id;
+  if (!eventId) return fail('Erst einen Gottesdienst aus ChurchTools wählen.');
+  try {
+    const dump = await churchtools.rawDump(eventId);
+    const now = new Date();
+    const stamp = `${churchtools.isoDate(now)}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const file = path.join(app.getPath('userData'), 'logs', `churchtools-${eventId}-${stamp}.json`);
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, JSON.stringify(dump, null, 2), 'utf8');
+    shell.showItemInFolder(file);
+    return ok({ path: file, failed: dump.anfragen.filter((a) => a.fehler).length });
+  } catch (err) { return fail(err); }
 });
 
 ipcMain.handle('ct:calendars', async () => {

@@ -127,7 +127,15 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Regel sortiert die Chips im Editor. `setAgenda` gibt die Anzahl zurück (`autoFilled` in der Antwort von
   `ct:agenda`). Reihenfolge der Quellen: Ablaufplan-Person vor Dienstplanung.
   **Die genaue Antwortform von ChurchTools wurde nicht gegen eine echte Instanz geprüft** (nur mit nachgebauten
-  Antworten); bei Abweichungen die echte Antwort ansehen und `eventServices` anpassen. Fehler beim Lesen stören
+  Antworten); bei Abweichungen die echte Antwort ansehen und `eventServices` anpassen. Dafür gibt es
+  *Einstellungen → ChurchTools → Fehlersuche* („Antworten zum Termin speichern“, IPC `ct:dump`, `churchtools.rawDump`):
+  stellt dieselben Anfragen wie `agenda`/`eventServices` (dazu bis zu drei `/api/persons/{id}`) und schreibt die
+  unveränderten Antworten nach `userData/logs/churchtools-<id>-<Zeit>.json`.
+  **Geprüft am 2026-10-21** (Mac, ebbp.church.tools, Bibelstunde 7020): `GET /api/events/{id}?include=eventServices`
+  liefert `eventServices[]` mit `serviceId`, `name` (= Personenname, `null` bei unbesetztem Dienst), `personId` und
+  `person` (`title`, `domainAttributes` mit `firstName`/`lastName`); Dienstnamen aus `/api/services` (`id`, `name`).
+  Der Infotext stand in `description` (gleich in `note`). Ergebnis in der App richtig: „Predigt: Psalm 85“, beide
+  Abschnitte mit Interpret. Ungeprüft bleibt die Form von `/agenda` (dieser Termin hatte keinen Ablaufplan, 404). Fehler beim Lesen stören
   den Termin-Import nicht (Hinweis per Toast, `suggestionError`).
 
 ### Meldungen (Toasts)
@@ -219,6 +227,12 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   −0,01 s (vorher −4,7), verdeckt −0,02 s (vorher −6,8). Neuladen behält die PID (nichts zu tun); nach einem
   abgeschossenen Renderer wurde die neue PID 5 s später ausgenommen. Der erste Aufruf nach dem App-Start dauerte etwa
   18 s (PowerShell übersetzt die C#-Klasse); wer in dieser Zeit schon aufnimmt und minimiert, verliert dort noch etwas.
+  **Seit 2026-10-21 zwischengespeichert:** Die Klasse wird einmal als `userData/cache/EbbtonTimerRes-<sha1>.dll`
+  übersetzt (`-OutputAssembly`, über eine `.tmp.dll` mit `Move-Item`) und danach nur geladen; Prüfsumme des Quelltexts im
+  Namen, eine geänderte Klasse wird also neu übersetzt. Scheitert das Ablegen, wird wie vorher im Speicher übersetzt.
+  Protokoll: `weg` (`zwischenspeicher`/`neu-uebersetzt`/`speicher`) und `dauerMs`. **Am Kirchen-PC noch nicht geprüft**
+  (das PowerShell-Skript lief nur in Tests mit nachgebautem Aufruf): ab dem zweiten Start sollte `weg=zwischenspeicher`
+  mit wenigen Sekunden stehen. Bleibt es lange, ist der Start von PowerShell selbst der Engpass, nicht der Compiler.
 - **Fehlbetragsmessung (Stereo)** (`deficit.js`, `DeficitMeter`; Takt im Hauptprozess jede Sekunde): vergangene Zeit
   minus aufgenommene Dauer, Pausen ausgenommen, Messbeginn erst beim ersten neuen Block nach Start/Fortsetzen (sonst
   ~0,1 s Übertragungszeit als Dauer-Fehlbetrag). Gemeldet wird das **Minimum der letzten 10 Messungen** – Blöcke, die
