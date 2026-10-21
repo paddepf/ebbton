@@ -10,6 +10,8 @@
   let duration = 0;
   let durationAt = 0;               // Zeitpunkt der letzten Dauer, damit der Timer zwischen den Meldungen weiterläuft
   let authFailed = false;
+  let connected = false;            // getrennt: Zustand ist veraltet, der Timer zählt nicht weiter
+  let levelsAt = 0;                 // letzte Pegelmeldung (kommen nur während der Aufnahme)
 
   const store = {
     get() { try { return localStorage.getItem(KEY) || ''; } catch { return ''; } },
@@ -50,6 +52,8 @@
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
       if (msg.type === 'auth' && msg.ok) {
+        connected = true;
+        $('status').classList.remove('stale');
         setConn('on', 'verbunden');
         $('login').hidden = true;
         $('status').hidden = false;
@@ -64,11 +68,16 @@
       } else if (msg.type === 'levels') {
         const l = msg.payload || {};
         setDuration(l.duration);
+        levelsAt = Date.now();
         meter(l);
       }
     };
     ws.onclose = () => {
-      setConn('off', 'getrennt');
+      if (connected) duration = liveDuration();   // Stand beim Abbruch festhalten
+      connected = false;
+      $('status').classList.add('stale');
+      meter({});
+      setConn('off', 'getrennt – Anzeige veraltet');
       if (!authFailed) retry = setTimeout(connect, 3000);
     };
   }
@@ -80,7 +89,7 @@
   }
 
   function liveDuration() {
-    return state?.status === 'recording' ? duration + (Date.now() - durationAt) / 1000 : duration;
+    return connected && state?.status === 'recording' ? duration + (Date.now() - durationAt) / 1000 : duration;
   }
 
   function meter({ l = 0, r = 0 }) {
@@ -131,6 +140,7 @@
     const items = [];
     if (busy && h.input === 'lost') items.push(['error', 'Kein Audiosignal vom Eingang!']);
     else if (busy && h.input === 'silent') items.push(['warn', 'Seit über 20 s Stille am Eingang']);
+    if (busy && h.deficit) items.push(['warn', `Aufnahme verliert Audio (etwa ${String(h.deficit).replace('.', ',')} s)`]);
     if (h.write === 'error') items.push(['error', 'Audio kann nicht gespeichert werden']);
     else if (h.write === 'slow') items.push(['warn', 'Laufwerk kommt nicht hinterher']);
     if (h.disk?.level === 'low') items.push(['error', 'Speicherplatz fast voll']);
@@ -147,6 +157,10 @@
   }
 
   function tick() {
+    if (levelsAt && Date.now() - levelsAt > 600) {   // Pause, Ende: Pegel fällt auf null wie in der App
+      levelsAt = 0;
+      meter({});
+    }
     if (!state) return;
     const d = liveDuration();
     $('timer').textContent = fmt(d);

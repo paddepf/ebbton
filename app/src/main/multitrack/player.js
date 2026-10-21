@@ -10,7 +10,7 @@
 const fs = require('fs');
 const { readInfo } = require('../wav');
 
-const BYTES = 3;
+const { BYTES } = require('./writer');   // 24 Bit je Abtastwert, wie geschrieben
 const CACHE_SECONDS = 0.5;
 
 /** Liest eine Spur abschnittsweise (Zwischenspeicher von 0,5 s, die Wiedergabe liest fortlaufend). */
@@ -147,4 +147,4 @@ class Player {
   }
 }
 
-module.exports = { Player, TrackReader };
+module.exports = { Player };

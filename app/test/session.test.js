@@ -231,3 +231,32 @@ test('Neue Aufnahme vorbereiten: zurück vor den Start, Ablauf wieder offen, nic
   assert.equal(s.placedSections().length, 0);
   assert.ok(fs.existsSync(wav));                                                           // die beendete Aufnahme bleibt
 }));
+
+test('Offener Schnitt überlappt beim Stop einen gezogenen: beide werden verschmolzen', () => withSession(async (s) => {
+  s.start({ sampleRate: 48000, channels: 2 });
+  s.pushAudio(silence(10));
+  s.toggleCut();                       // offen ab 10 s
+  s.pushAudio(silence(8));
+  s.addCut(8, 13);
+  s.stop();
+  assert.deepEqual(s.cuts.map((c) => [c.start, c.end]), [[8, 18]]);
+}));
+
+test('Lücke füllen speichert den Vermerk zeitnah', () => withSession(async (s) => {
+  s.start({ sampleRate: 8000, channels: 2 });
+  s.pushAudio(silence(2));
+  s._dirty = false;
+  s.fillGap(1);
+  assert.equal(s._dirty, true);
+}));
+
+test('Cue-Marker auch, wenn vor Ende des Schreibens schon die nächste Aufnahme vorbereitet wird', () => withSession(async (s) => {
+  s.setAgenda([{ id: null, title: 'Einleitung' }], 'plan');
+  s.start({ sampleRate: 8000, channels: 2 });
+  s.pushAudio(silence(3));
+  const wav = s.wavPath;
+  s.stop();
+  s.prepareNext();                     // wartet nicht auf whenWritten
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(fs.readFileSync(wav).includes(Buffer.from('cue ')));
+}));

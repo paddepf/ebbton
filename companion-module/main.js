@@ -176,6 +176,9 @@ export default class EbbtonInstance extends InstanceBase {
 		this.reconnectTimer = null
 		if (this.ws) {
 			this.ws.removeAllListeners()
+			// close() während des Verbindungsaufbaus meldet im nächsten Takt noch einen Fehler; ohne Empfänger
+			// wäre das eine unbehandelte Ausnahme, die das Modul abstürzen lässt.
+			this.ws.on('error', () => {})
 			try {
 				this.ws.close()
 			} catch {

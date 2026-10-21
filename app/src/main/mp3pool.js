@@ -105,4 +105,4 @@ async function exportAll(jobs, { concurrency = defaultConcurrency(), useWorkers 
   return results;
 }
 
-module.exports = { exportAll, defaultConcurrency };
+module.exports = { exportAll };

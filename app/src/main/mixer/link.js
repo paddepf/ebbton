@@ -71,11 +71,6 @@ class MixerLink extends EventEmitter {
     return this.client.channels[c] || { name: '', color: null };
   }
 
-  /** Alles neu vom Pult lesen (z. B. direkt vor dem Aufnahmestart). */
-  refresh() {
-    return this.connected ? this.client.refresh() : Promise.resolve(this.state());
-  }
-
   /**
    * Passt das Routing der Kartenausgänge zur Aufnahmeart?
    * @param {'stereo'|'multitrack'} mode

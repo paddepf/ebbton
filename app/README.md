@@ -372,7 +372,8 @@ Für eine reine Statusabfrage genügt `http://<rechner>:8765/health`.
 **Statusseite für Handy und Tablet:** `http://<rechner>:8765/` im Browser öffnen (die genaue Adresse steht unter
 Einstellungen → Netzwerk) und mit dem Passwort zum Mitlesen anmelden. Die Seite zeigt Zustand, Laufzeit, Pegel,
 Warnungen sowie den aktuellen und nächsten Ablaufpunkt – praktisch für den Prediger oder wenn man nicht am
-Technikplatz steht. Steuern lässt sich dort nichts.
+Technikplatz steht. Steuern lässt sich dort nichts. Bricht die Verbindung ab, wird die Anzeige blass („getrennt –
+Anzeige veraltet“) und der Timer bleibt stehen, bis die Seite wieder verbunden ist.
 
 Das Companion-Modul liegt im Ordner `companion-module/` dieses Repositorys.
 

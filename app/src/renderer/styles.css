@@ -34,10 +34,8 @@
   --wave-bg: #131A21;
   --ruler-bg: #101720;
   --wave-flag-text: #0E1318;
-  --wave-selection: rgba(108,124,224,0.22);
   --cut: 255,59,48;               /* Schnitte (RGB, Deckkraft setzt die Wellenform) */
   --cut-text: #FF8A80;
-  --wave-stripe: rgba(255,255,255,0.022);
   --wave-hover: rgba(255,255,255,0.18);
   --overlay: rgba(6, 9, 12, .72);
   --shadow: rgba(0,0,0,.4);
@@ -81,10 +79,8 @@
   --wave-bg: #F7F9FB;
   --ruler-bg: #E8ECF1;
   --wave-flag-text: #0E1318;     /* dunkle Schrift: die Fähnchen sind auch im hellen Design hell */
-  --wave-selection: rgba(79,95,208,0.18);
   --cut: 200,30,25;
   --cut-text: #A3140F;
-  --wave-stripe: rgba(0,0,0,0.03);
   --wave-hover: rgba(0,0,0,0.25);
   --overlay: rgba(20, 28, 38, .45);
   --shadow: rgba(20,30,45,.18);
@@ -238,9 +234,6 @@ input::placeholder { color: var(--muted); opacity: .8; }
   padding: 5px 13px;
   white-space: nowrap;
 }
-.badge[data-on="true"] { color: var(--manual); border-color: rgba(43,179,163,.4); }
-.badge[data-on="warn"] { color: var(--amber); border-color: rgba(255,176,32,.4); }
-.badge[data-level="ok"] { color: var(--muted); }
 #disk-badge[data-level="ok"] { display: none; }   /* nur bei knappem Platz sichtbar, sonst steht es in den Einstellungen */
 .badge[data-level="warn"] { color: var(--amber); border-color: rgba(255,176,32,.4); }
 .badge[data-level="low"] { color: var(--tally-text); border-color: var(--tally); }
@@ -515,7 +508,6 @@ body.compact canvas.wave { transition: none; }
 .loud-readout .lr { flex-shrink: 0; }
 .loud-readout .lr[hidden] { display: none; }
 /* Erklärung beim Darüberfahren (eigene Infobox statt title: erscheint auch, wenn das Fenster nicht aktiv ist) */
-.wave-toolbar { position: relative; }
 .loud-readout { cursor: help; }
 .loud-help {
   position: absolute; right: 0; top: calc(100% - 4px); z-index: 20; width: min(420px, 100%);
@@ -529,7 +521,6 @@ body.compact canvas.wave { transition: none; }
 .loud-help dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 8px 0; }
 .loud-help dt { font-weight: 700; color: var(--loud); }
 .loud-help dd { margin: 0; }
-body.compact .loud-help { display: none; }
 .loud-readout .lr b { color: var(--muted); font-weight: 600; font-size: .85em; }
 .loud-readout .lr.main { color: var(--loud); font-weight: 600; }
 .loud-readout .lr.main b { color: var(--loud); }
@@ -540,7 +531,6 @@ body.compact .loud-help { display: none; }
 .loud-readout .sec b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loud-readout .sec span, .loud-readout .sec small { flex-shrink: 0; }
 body.dense .loud-readout { font-size: 13px; gap: 10px; }
-body.compact .loud-readout { display: none; }
 
 /* Schalter direkt in der Wellenform, unten links (rechts stehen Live-Stelle, Skala und Messwerte) */
 .wave-wrap { position: relative; }
@@ -568,7 +558,6 @@ body.compact .loud-readout { display: none; }
 .wave-chip:has(input:checked) { --chip: var(--plan); color: var(--chip); border-color: color-mix(in srgb, var(--chip) 60%, transparent); background: color-mix(in srgb, var(--chip) 14%, var(--panel)); }
 .chip-loud:has(input:checked) { --chip: var(--loud); }
 .chip-loop:has(input:checked) { --chip: var(--manual); }
-body.compact .wave-chips { display: none; }
 /* Flache Wellenform (kompakte Ansicht, niedrige Fenster): Schalter nur als Symbol, Bedeutung im Tooltip */
 @media (max-height: 820px) {
   .wave-chip span { display: none; }
@@ -1010,7 +999,6 @@ body.dense .ch-list { padding: 8px 10px 10px; gap: 2px 6px; }
 }
 .list-item:hover { border-color: var(--plan); }
 .list-item .meta { color: var(--muted); font-size: 12px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
-.list-item.unfinished { border-color: rgba(255,176,32,.5); }
 .list-item.current { border-color: var(--plan); }
 .list-head { color: var(--muted); font-size: 12px; font-weight: 500; padding: 6px 2px 0; }
 
@@ -1191,7 +1179,6 @@ body.compact .ontop { font-size: 12px; gap: 4px; }
 body.compact .ontop input { width: 13px; height: 13px; }
 @media (max-width: 380px) { body.compact .ontop-long { display: none; } }   /* schmal: nur „oben“ */
 body.compact .top-actions > :not(#btn-compact):not(.compact-only):not(#disk-badge) { display: none; }
-body.compact #disk-badge[data-level="ok"] { display: none; }
 body.compact .service { min-width: 0; flex: 1; }
 body.compact .service-name { padding: 2px 4px; max-width: 100%; min-width: 0; }
 body.compact #service-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1281,7 +1268,6 @@ body.compact .alert { padding: 8px 10px; font-size: 13px; gap: 8px; }
 body.compact .alert::before { font-size: 17px; }
 body.compact .toasts { left: 8px; right: 8px; bottom: 8px; max-width: none; }
 body.compact .toast { font-size: 12px; padding: 5px 8px; }
-body.compact .loud-help { display: none; }
 
 /* Mini-Fenster nach dem Beenden (body.review): keine Aufnahmeknöpfe, dafür der MP3-Export */
 .compact-export { display: none; }
@@ -1449,7 +1435,6 @@ body.dense .alert::before { font-size: 20px; }
   body.dense .keybar { display: none; }        /* Kürzel weiter über „?“ */
   body.dense .nc-elapsed { font-size: 18px; }
 }
-body.compact .topbar .view-switch button { font-size: 11px; padding: 2px 6px; }
 
 /* ---------------------------------------------------------------- Updates */
 
@@ -1532,7 +1517,6 @@ body.compact .service-name { height: auto; }
 .topbar .top-actions > .top-text:hover:not(:disabled) { background: var(--raised); border-color: transparent; color: var(--text); }
 .topbar .top-actions > .top-text { display: inline-flex; align-items: center; gap: 8px; color: var(--text); }
 .top-text svg { width: calc(var(--top-h) * .46); height: calc(var(--top-h) * .46); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); }
-.top-actions > #btn-settings { margin-left: 0; }
 .top-actions > .view-switch { margin-left: var(--top-group); }
 .service-name.unset { border-style: dashed; border-color: color-mix(in srgb, var(--plan) 60%, transparent); }
 .service-name.unset #service-name { color: var(--plan); }

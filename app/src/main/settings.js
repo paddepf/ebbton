@@ -12,7 +12,7 @@ const DEFAULTS = {
   inputDeviceId: '',
   inputDeviceLabel: '',
   outputDeviceId: '',           // Wiedergabe/Mithören; leer = Systemstandard
-  outputDeviceLabel: '',
+  outputDeviceLabel: '',        // Name dazu (Anzeige, wenn das Gerät nicht angeschlossen ist)
   sampleRate: 48000,
 
   // Mehrspuraufnahme (siehe multitrack/)

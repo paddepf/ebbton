@@ -59,15 +59,16 @@ function* readPieces(wavPath, info, frameRanges) {
       const { samples } = wav.readFrames(wavPath, f0, count, info);
       const frames = samples.length / channels;
       if (frameRanges.length > 1) {
-        // Einblenden nach einem Schnitt, Ausblenden vor einem Schnitt
-        const fadeIn = p > 0 && f0 === pStart;
-        const fadeOut = p < frameRanges.length - 1 && f0 + count >= pEnd;
-        for (let f = 0; f < Math.min(fadeFrames, frames); f++) {
-          const gain = f / fadeFrames;
-          for (let c = 0; c < channels; c++) {
-            if (fadeIn) samples[f * channels + c] *= gain;
-            if (fadeOut) samples[(frames - 1 - f) * channels + c] *= gain;
-          }
+        // Einblenden nach einem Schnitt, Ausblenden vor einem Schnitt. Gerechnet ab Anfang bzw. Ende des Teilstücks,
+        // nicht des Leseblocks: Endet ein Teilstück knapp hinter einer Blockgrenze, liegt die Blende in zwei Blöcken.
+        const fade = (f, gain) => {
+          for (let c = 0; c < channels; c++) samples[f * channels + c] *= gain;
+        };
+        if (p > 0) {
+          for (let f = 0; f < frames && f0 + f - pStart < fadeFrames; f++) fade(f, (f0 + f - pStart) / fadeFrames);
+        }
+        if (p < frameRanges.length - 1) {
+          for (let f = Math.max(0, pEnd - fadeFrames - f0); f < frames; f++) fade(f, (pEnd - 1 - (f0 + f)) / fadeFrames);
         }
       }
       yield { samples, frames, offset };

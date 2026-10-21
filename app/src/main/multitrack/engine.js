@@ -93,7 +93,9 @@ class MultitrackEngine extends EventEmitter {
    */
   open(o) {
     const same = this.opened && this.opts.deviceId === o.deviceId && !!this.opts.simulate === !!o.simulate
-      && (!o.sampleRate || o.sampleRate === this.opts.sampleRate);
+      // Ohne Angabe gilt die bevorzugte Rate – sonst bliebe die Rate eines vorher abgespielten oder
+      // angehängten Mitschnitts für die nächste neue Aufnahme hängen.
+      && (o.sampleRate || this.device.preferredSampleRate || 48000) === this.opts.sampleRate;
     if (same) return this.info();
     if (this.running) throw new Error('Während der Aufnahme kann das Gerät nicht gewechselt werden.');
     this._shutdown();
@@ -345,6 +347,11 @@ class MultitrackEngine extends EventEmitter {
       if (device.inputChannels !== this.inputs) throw new Error(`„${device.name}“ meldet jetzt ${device.inputChannels} statt ${this.inputs} Eingänge.`);
       this.device = device;
       this.frameSize = this._open();
+      if (this.player) {
+        // Die Ausgabe-Warteschlange des alten Stroms ist weg; nachgelegt wird sonst nur nach verbrauchten Blöcken.
+        this.playQueue = [];
+        this._fillOutput();
+      }
       this.emit('reopen', { ok: true });
     } catch (err) {
       this.emit('reopen', { ok: false, error: err.message });

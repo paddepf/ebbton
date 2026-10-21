@@ -82,4 +82,4 @@ class MixerSimulator {
   setRouting(blocks) { M32.CARD_BLOCKS.forEach((b, i) => this.set(M32.routingPath(b), [blocks[i]])); }
 }
 
-module.exports = { MixerSimulator, ROUTING_MULTITRACK, ROUTING_STEREO, DEMO_NAMES };
+module.exports = { MixerSimulator, ROUTING_MULTITRACK, ROUTING_STEREO };

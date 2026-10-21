@@ -20,6 +20,8 @@ const PROTOCOL_VERSION = 1;
 const LEVEL_INTERVAL_MS = 200;
 const MAX_FAILURES = 5;        // Fehlversuche pro Adresse …
 const LOCK_MS = 60000;         // … danach so lange keine Anmeldung
+const FAILURE_MEMORY_MS = 10 * 60000;   // Fehlversuche verfallen nach 10 min ohne weiteren
+const MAX_MESSAGE_BYTES = 64 * 1024;
 
 /** IPv4-Adressen dieses Rechners im lokalen Netz (für die Adresse der Statusseite). */
 function lanAddresses() {
@@ -40,7 +42,8 @@ function safeEqual(a, b) {
  * entgegen. Es gibt zwei Rollen:
  *   - "control": Vollzugriff (Bitfocus Companion) – Passwort aus networkPassword
  *   - "monitor": nur lesen (Dashboard)          – Passwort aus monitorPassword
- * Ist kein Monitor-Passwort gesetzt, ist die Monitor-Rolle deaktiviert.
+ * Ohne Monitor-Passwort gibt es die Monitor-Rolle nur für Verbindungen mit dem Vollzugriffs-Passwort, die sich
+ * selbst beschränken (role: monitor) oder aus einem Browser kommen (Statusseite).
  */
 class NetServer extends EventEmitter {
   constructor() {
@@ -87,7 +90,9 @@ class NetServer extends EventEmitter {
       res.end('Ebbton: bitte über WebSocket verbinden.');
     });
 
-    this.wss = new WebSocketServer({ server: this.http });
+    // Steuerbefehle sind klein. Ohne Grenze (Vorgabe von ws: 100 MiB) könnte jedes Gerät im Netz schon vor der
+    // Anmeldung riesige Nachrichten schicken, die der Hauptprozess puffern und parsen müsste – mitten in der Aufnahme.
+    this.wss = new WebSocketServer({ server: this.http, maxPayload: MAX_MESSAGE_BYTES });
     this.wss.on('connection', (ws, req) => this._onConnection(ws, req));
     // ws reicht Fehler des HTTP-Servers (z. B. Port belegt) als 'error' weiter. Ohne Listener würde das als
     // unbehandelte Ausnahme den Hauptprozess treffen – die eigentliche Meldung macht der Handler unten.
@@ -101,7 +106,9 @@ class NetServer extends EventEmitter {
       return { ok: false, error: 'Port konnte nicht geöffnet werden: ' + err.message };
     }
 
-    this.http.on('error', (err) => {
+    const server = this.http;
+    server.on('error', (err) => {
+      if (this.http !== server) return;   // verspäteter Fehler eines inzwischen ersetzten Servers
       this.emit('error-notice', `Netzwerkschnittstelle: ${err.code === 'EADDRINUSE'
         ? `Port ${cfg.networkPort} ist belegt.`
         : err.message}`);
@@ -165,7 +172,7 @@ class NetServer extends EventEmitter {
   restart() {
     this.stop();
     const result = this.start();
-    this.emit('status', this.statusInfo());
+    if (!result.ok) this.emit('status', this.statusInfo());   // start() meldet nur bei Erfolg
     return result;
   }
 
@@ -242,7 +249,10 @@ class NetServer extends EventEmitter {
     else if (cfg.monitorPassword && safeEqual(password, cfg.monitorPassword)) role = 'monitor';
 
     if (!role) {
-      const entry = this.failures.get(info.ip) || { count: 0, until: 0 };
+      const now = Date.now();
+      const entry = this.failures.get(info.ip) || { count: 0, until: 0, last: 0 };
+      if (now - entry.last > FAILURE_MEMORY_MS) entry.count = 0;   // alte Fehlversuche (Tippfehler letzte Woche) vergessen
+      entry.last = now;
       entry.count += 1;
       if (entry.count >= MAX_FAILURES) {
         entry.until = Date.now() + LOCK_MS;
@@ -305,10 +315,9 @@ class NetServer extends EventEmitter {
     try { ws.send(JSON.stringify(obj)); } catch { /* Verbindung bricht ab */ }
   }
 
-  broadcast(obj, { includeMonitors = true } = {}) {
+  broadcast(obj) {
     this.clients.forEach((info, ws) => {
       if (!info.authed) return;
-      if (!includeMonitors && info.role === 'monitor') return;
       this._send(ws, obj);
     });
   }
@@ -333,6 +342,7 @@ class NetServer extends EventEmitter {
     return {
       ...state,
       wavPath: undefined,
+      health: state.health ? { ...state.health, writeMessage: undefined } : state.health,   // Systemmeldung, ggf. mit Pfad
       service: state.service ? { ...state.service, suggestions: undefined } : state.service,
       sections: (state.sections || []).map(strip),
       pending: (state.pending || []).map(strip),
@@ -358,4 +368,4 @@ class NetServer extends EventEmitter {
   }
 }
 
-module.exports = { NetServer, PROTOCOL_VERSION };
+module.exports = { NetServer };

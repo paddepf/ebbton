@@ -67,4 +67,4 @@ button { font: inherit; font-size: 17px; font-weight: 600; padding: 12px; border
 .sections li .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sections li .t { color: var(--muted); flex-shrink: 0; }
 .sections li.live { border-color: var(--rec); }
-.sections li.open .n { color: var(--muted); }
+#status.stale { opacity: 0.45; }   /* Verbindung verloren: Anzeige ist veraltet */

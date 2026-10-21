@@ -8,9 +8,10 @@ const settings = require('./settings');
  */
 
 /**
- * Gerade Anführungszeichen aus ChurchTools typografisch setzen: "Text" → „Text“, Apostroph ' → ’ (in Abschnittsnamen,
- * Dateinamen und ID3-Titeln sähe man sonst die Schreibmaschinenzeichen). Öffnend ist ein Zeichen am Anfang oder nach
- * Leerraum bzw. Klammer, sonst schließend.
+ * Gerade Anführungszeichen aus ChurchTools typografisch setzen: "Text" → „Text“, 'Text' → ‚Text‘, Apostroph ' → ’
+ * (in Abschnittsnamen, Dateinamen und ID3-Titeln sähe man sonst die Schreibmaschinenzeichen). Öffnend ist ein Zeichen
+ * am Anfang oder nach Leerraum bzw. Klammer, sonst schließend; ein einfaches schließt ein ‚ nur vor Leerraum,
+ * Satzzeichen oder Textende, sonst ist es ein Apostroph („Gott's“).
  */
 function typoQuotes(text) {
   if (typeof text !== 'string' || !/["']/.test(text)) return text;
@@ -18,6 +19,7 @@ function typoQuotes(text) {
     .replace(/(^|[\s(\[{\/–—-])"/g, '$1„')
     .replace(/"/g, '“')
     .replace(/(^|[\s(\[{\/–—-])'/g, '$1‚')
+    .replace(/‚([^‚]*?)'(?=$|[\s.,;:!?)\]}–—-])/g, '‚$1‘')
     .replace(/'/g, '’');
 }
 
@@ -38,40 +40,42 @@ async function requestRaw(pathname, params) {
     else url.searchParams.set(k, v);
   });
 
+  // Die Zeitgrenze gilt auch für den Antwortkörper: Stockt er (WLAN, Proxy), hinge der Aufruf sonst ohne Ende.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
-  let res;
   try {
-    res = await fetch(url, {
-      headers: {
-        Authorization: `Login ${token}`,
-        Accept: 'application/json'
-      },
-      signal: controller.signal
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') throw new Error('ChurchTools antwortet nicht (Zeitüberschreitung).');
-    throw new Error('ChurchTools ist nicht erreichbar: ' + err.message);
+    let res;
+    try {
+      res = await fetch(url, {
+        headers: {
+          Authorization: `Login ${token}`,
+          Accept: 'application/json'
+        },
+        signal: controller.signal
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('ChurchTools antwortet nicht (Zeitüberschreitung).');
+      throw new Error('ChurchTools ist nicht erreichbar: ' + err.message);
+    }
+
+    if (res.status === 401 || res.status === 403) {
+      throw new Error('ChurchTools hat den Zugriff abgelehnt. Bitte Token prüfen.');
+    }
+    if (!res.ok) {
+      const err = new Error(`ChurchTools meldet Fehler ${res.status}.`);
+      err.status = res.status;
+      throw err;
+    }
+    try {
+      return await res.json();
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error('ChurchTools antwortet nicht (Zeitüberschreitung).');
+      // z. B. eine HTML-Anmeldeseite bei falscher Adresse
+      throw new Error('ChurchTools hat keine gültige Antwort geliefert. Bitte die Adresse prüfen.');
+    }
   } finally {
     clearTimeout(timeout);
   }
-
-  if (res.status === 401 || res.status === 403) {
-    throw new Error('ChurchTools hat den Zugriff abgelehnt. Bitte Token prüfen.');
-  }
-  if (!res.ok) {
-    const err = new Error(`ChurchTools meldet Fehler ${res.status}.`);
-    err.status = res.status;
-    throw err;
-  }
-  let json;
-  try {
-    json = await res.json();
-  } catch {
-    // z. B. eine HTML-Anmeldeseite bei falscher Adresse
-    throw new Error('ChurchTools hat keine gültige Antwort geliefert. Bitte die Adresse prüfen.');
-  }
-  return json;
 }
 
 async function request(pathname, params) {
@@ -260,6 +264,16 @@ async function eventServices(eventId, wanted) {
   return { suggestions: out, found: entries.length, info };
 }
 
+const ENTITIES = { nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' };
+
+/** Ein HTML-Entity in einem Durchgang (sonst würde aus „&amp;quot;“ ein Anführungszeichen statt „&quot;“). */
+function decodeEntity(whole, name) {
+  const lower = name.toLowerCase();
+  if (lower[0] !== '#') return ENTITIES[lower];
+  const code = lower[1] === 'x' ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10);
+  return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+}
+
 /**
  * Infotext des Termins (z. B. „Kolosser 2,6-7 Verwurzelt in Christus“ bei der Bibelstunde): die erste Zeile
  * aus dem ersten gefüllten Feld, ohne HTML und doppelte Leerzeichen. Die Feldnamen sind nicht gegen eine echte
@@ -272,7 +286,7 @@ function eventInfoText(event) {
     const line = raw
       .replace(/<br\s*\/?>|<\/p>|<\/div>|<\/li>/gi, '\n')
       .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+      .replace(/&(#x[0-9a-f]+|#\d+|nbsp|amp|quot|apos|lt|gt);/gi, decodeEntity)
       .split(/\r?\n/)
       .map((l) => l.replace(/\s+/g, ' ').trim())
       .find(Boolean);

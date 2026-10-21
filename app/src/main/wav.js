@@ -18,7 +18,6 @@ const fs = require('fs');
 const { EventEmitter } = require('events');
 const { Worker } = require('worker_threads');
 
-const LEGACY_HEADER_BYTES = 44;   // ältere Aufnahmen: RIFF + fmt + data
 const HEADER_BYTES = 80;          // neue Aufnahmen: RIFF + JUNK/ds64 + fmt + data
 const MAX_UINT32 = 0xFFFFFFFF;
 const SLOW_QUEUE_BYTES = 32 * 1024 * 1024;   // so viel ungeschriebenes Audio gilt als "Laufwerk zu langsam"
@@ -191,7 +190,13 @@ class WavWriter extends EventEmitter {
     });
     this.worker.on('message', (msg) => this._onMessage(msg));
     this.worker.on('error', (err) => this._fail({ message: err.message, code: err.code || null }));
-    this.worker.on('exit', () => this._resolveClosed(this.writtenBytes));
+    this.worker.on('exit', (code) => {
+      // Stirbt der Thread vorzeitig (z. B. kein Speicher), bliebe die Datei sonst bis zum Programmende offen
+      // (unter Windows gesperrt), und niemand erführe davon.
+      if (!this.closed) this._fail({ message: `Der Schreib-Thread wurde unerwartet beendet (Code ${code}).`, code: null });
+      this._closeFd();
+      this._resolveClosed(this.writtenBytes);
+    });
     this._slow = false;
   }
 
@@ -199,11 +204,17 @@ class WavWriter extends EventEmitter {
     if (msg.type === 'progress' || msg.type === 'closed') this.writtenBytes = msg.written;
     if (msg.type === 'error') this._fail(msg);
     if (msg.type === 'closed') {
-      try { fs.closeSync(this.fd); } catch { /* bereits zu */ }
+      this._closeFd();
       this._resolveClosed(this.writtenBytes);
       this.worker.terminate().catch(() => {});
     }
     this._checkSlow();
+  }
+
+  _closeFd() {
+    if (this.fd == null) return;
+    try { fs.closeSync(this.fd); } catch { /* bereits zu */ }
+    this.fd = null;
   }
 
   _fail(err) {
@@ -425,4 +436,4 @@ function readSlice(filePath, startSec, endSec) {
   return readFrames(filePath, startFrame, Math.max(0, endFrame - startFrame), info);
 }
 
-module.exports = { WavWriter, readInfo, writeCues, readSlice, readFrames, buildHeader, HEADER_BYTES, LEGACY_HEADER_BYTES, MAX_UINT32 };
+module.exports = { WavWriter, readInfo, writeCues, readSlice, readFrames, buildHeader, HEADER_BYTES };

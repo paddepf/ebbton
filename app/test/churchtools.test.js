@@ -78,9 +78,12 @@ test('Infotext des Termins: erste Zeile, ohne HTML und doppelte Leerzeichen', as
 test('Gerade Anführungszeichen werden typografisch', () => {
   assert.equal(ct.typoQuotes('Predigt: Kolosser 2,6-7 "Verwurzelt in Christus"'), 'Predigt: Kolosser 2,6-7 „Verwurzelt in Christus“');
   assert.equal(ct.typoQuotes('"Gott ist treu" (Ps 33)'), '„Gott ist treu“ (Ps 33)');
-  assert.equal(ct.typoQuotes("Gottes Wort und Jesu' Ruf, 'kurz'"), 'Gottes Wort und Jesu’ Ruf, ‚kurz’');
+  assert.equal(ct.typoQuotes("Gottes Wort und Jesu' Ruf, 'kurz'"), 'Gottes Wort und Jesu’ Ruf, ‚kurz‘');
+  assert.equal(ct.typoQuotes("'Gott's Wort'."), '‚Gott’s Wort‘.');
   assert.equal(ct.typoQuotes('ohne'), 'ohne');
   assert.equal(ct.eventInfoText({ description: 'Römer 8 "Nichts kann uns trennen"' }), 'Römer 8 „Nichts kann uns trennen“');
+  // HTML-Entities in einem Durchgang: &amp;quot; bleibt &quot;, numerische werden zu Zeichen
+  assert.equal(ct.eventInfoText({ description: '<p>A &amp;quot; &lt;B&gt; &#8222;C&#x201C;</p>' }), 'A &quot; <B> „C“');
 });
 
 test('404 trägt den Status, kaputte Antwort eine klare Meldung', async () => {

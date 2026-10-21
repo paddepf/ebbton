@@ -124,4 +124,4 @@ function limiterGains(peaks, gain, ceiling, rate, { releaseDbPerSecond = 20, att
   return g;
 }
 
-module.exports = { LoudnessMeter, limiterGains, kFilterCoefficients, PEAK_BLOCK };
+module.exports = { LoudnessMeter, limiterGains, PEAK_BLOCK };

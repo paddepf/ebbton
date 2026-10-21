@@ -23,7 +23,6 @@ const commands = {
   devices: (args) => engine.devices(args || {}),
   monitor: (args) => engine.monitor(args),
   unmonitor: () => engine.unmonitor(),
-  info: () => engine.info(),
   start: (args) => engine.start(args),
   play: (args) => engine.play(args),
   seek: (args) => engine.seek(args.seconds),

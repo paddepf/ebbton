@@ -22,16 +22,18 @@ getrennt. Es gibt zwei Rollen:
 | `control` | „Passwort für Steuerung“ | mitlesen und steuern |
 | `monitor` | „Passwort nur zum Mitlesen“ | nur mitlesen |
 
-Ist kein Monitor-Passwort gesetzt, existiert die Rolle nicht.
+Ist kein Monitor-Passwort gesetzt, gibt es die Rolle nur für Verbindungen mit dem Steuer-Passwort, die sich selbst
+beschränken (`"role": "monitor"`) oder aus einem Browser kommen.
 
 - **Browser** (Verbindungen mit `Origin`-Header, also Webseiten) erhalten immer nur die Rolle `monitor`, auch
   mit dem Steuer-Passwort – eine fremde Webseite soll den Recorder nicht steuern können. Companion und eigene
   Programme senden keinen `Origin`-Header.
 - Nach **5 Fehlversuchen** von derselben Adresse ist die Anmeldung dort 60 Sekunden gesperrt
-  (Fehler `auth_locked`).
+  (Fehler `auth_locked`). Fehlversuche verfallen nach 10 Minuten ohne weiteren.
+- Eine Nachricht darf höchstens **64 KiB** groß sein; größere beendet der Server mit Code 1009.
 - Die Rolle `monitor` bekommt den Zustand **ohne Dateipfade und Personennamen** (`wavPath`, `artist`,
-  `service.suggestions` und die Dateinamen in `exports` fehlen). Auch in Ereignissen fehlen für sie
-  `wavPath` und `file`.
+  `service.suggestions`, die Dateinamen in `exports` und `health.writeMessage` fehlen). Auch in Ereignissen
+  fehlen für sie `wavPath` und `file`.
 
 ```json
 { "type": "auth", "password": "geheim" }

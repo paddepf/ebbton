@@ -241,16 +241,12 @@
       bg: v('--wave-bg'),
       ruler: v('--ruler-bg'),
       flagText: v('--wave-flag-text'),
-      stripe: v('--wave-stripe'),
       hover: v('--wave-hover'),
       line: v('--line'),
       wave: v('--wave'),
       muted: v('--muted'),
       text: v('--text'),
-      plan: v('--plan'),
-      manual: v('--manual'),
       tally: v('--tally'),
-      selection: v('--wave-selection'),
       cut: v('--cut'),
       cutText: v('--cut-text'),
       loud: v('--loud'),
@@ -299,6 +295,9 @@
   }
 
   /** Datum des Gottesdienstes für Menschen: „So., 11. Okt. 2026“ (in Dateinamen bleibt es ISO). */
+  /** Text für innerHTML (Namen aus ChurchTools, vom Pult oder vom Nutzer). */
+  const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
   function serviceDateText(service) {
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(service?.date || '');
     if (!m) return service?.date || '';
@@ -653,7 +652,12 @@
     }
   };
   pre.onError = (message) => {
+    // Spur beendet (Gerät abgezogen): schließen, damit ein späterer Versuch (devicechange) neu öffnet.
     prelisten.error = message;
+    if (prelisten.on && !prelisten.busy) {
+      prelisten.on = false;
+      pre.stop().catch(() => {});
+    }
     renderNow();
   };
 
@@ -979,7 +983,12 @@
       }
       // Status sofort lokal setzen: Die Statusmeldung aus dem Hauptprozess kommt leicht verzögert, ein
       // zweiter Startbefehl (Doppeldruck, Companion) würde sonst die laufende Erfassung beenden.
-      if (state.session) state.session.status = 'recording';
+      // Ebenso die Aufnahmeart: Sonst hielte der Wächter eine Mehrspuraufnahme bis dahin für Stereo ohne laufende
+      // Erfassung und öffnete den Stereo-Eingang.
+      if (state.session) {
+        state.session.status = 'recording';
+        state.session.mode = multi ? 'multitrack' : 'stereo';
+      }
       state.exportSeen.clear();
       state.exportChecked.clear();
       $('player').pause();
@@ -996,6 +1005,8 @@
       wave.update({ playhead: null });
       setExportResult('');
     } catch (err) {
+      // Gescheitert, bevor die Aufnahme lief: eine schon geöffnete Erfassung nicht verwaist offen lassen.
+      if (state.session?.status !== 'recording' && capture.running) await capture.stop().catch(() => {});
       toast('error', err.message);
       if (opts.remote) window.api.reportRemoteResult({ kind: 'start', ok: false, error: err.message });
     } finally {
@@ -1077,6 +1088,11 @@
       let eingaenge = null;
       try { eingaenge = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput').map((d) => d.label || d.deviceId.slice(0, 8)); } catch { /* nur Hilfe */ }
       logInput('warn', 'geraete-geaendert', { eingaenge, ...inputSnapshot() });
+      // Pegel vor dem Start: nach einem Fehler (Gerät war weg) mit den neuen Geräten erneut versuchen.
+      if (prelisten.error && !prelisten.on) {
+        prelisten.error = null;
+        updatePrelisten();
+      }
     });
   }
 
@@ -1138,10 +1154,11 @@
             throw new Error(`Eingang läuft mit ${result.sampleRate} Hz statt ${rate} Hz.`);
           }
           warnDeviceFallback(result);
+          state.sampleRate = rate;   // nach Neuladen kann die Einstellung von der Rate der Aufnahme abweichen
           await sleep(1500);
           if (!isLive()) { await capture.stop(); return; }
           if (state.chunkSeq > before) {
-            const lost = Math.round((Date.now() - lostSince) / 1000);
+            const lost = lostSince ? Math.round((Date.now() - lostSince) / 1000) : null;   // 0 = nach Neuladen unbekannt
             logInput('warn', 'wiederverbunden', { fehlenSekunden: lost, ...inputSnapshot() });
             // Der Hauptprozess hat die Lücke mit Stille gefüllt: Wellenform und Lautheit von dort holen, sonst
             // wäre die lokal mitgerechnete Wellenform um die Lücke zu kurz.
@@ -1155,7 +1172,9 @@
                 state.bucketFrames = 0;
               }
             } catch (err) { console.warn('Wellenform nach der Lücke nicht abgeglichen:', err); }
-            toast('success', `Audioeingang wieder verbunden. Etwa ${lost} s fehlen – an der Stelle ist Stille.`, 10000);
+            // Mit Stille gefüllt wird nur während der Aufnahme (nicht in der Pause).
+            const filled = lost != null && state.session?.status === 'recording';
+            toast('success', filled ? `Audioeingang wieder verbunden. Etwa ${lost} s fehlen – an der Stelle ist Stille.` : 'Audioeingang wieder verbunden.', 10000);
             return;
           }
         } catch (err) {
@@ -1269,6 +1288,9 @@
     // Erst den angefangenen Audioblock abgeben, dann beenden: so fehlen am Ende keine Sekundenbruchteile.
     await capture.flush();
     const res = await window.api.record.stop();
+    // Status sofort lokal setzen (die Zustandsmeldung kommt gedrosselt): Sonst sähe der Wächter in der Zwischenzeit
+    // eine laufende Aufnahme ohne Erfassung und verbände den Eingang neu – Fehlalarm samt Protokolleintrag.
+    if (res.ok && state.session) state.session.status = 'stopped';
     await capture.stop();
     monitor.pause();
     if (!res.ok) {
@@ -2164,7 +2186,9 @@
       const onOk = () => finish(true);
       const onCancel = () => finish(false);
       const onBackdrop = (e) => { if (e.target === modal) onCancel(); };
-      const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); onCancel(); } };
+      // stopPropagation: Sonst sähe der allgemeine Tastenhandler danach die Einstellungen als oberstes Fenster und
+      // öffnete „Änderungen verwerfen?“ gleich wieder.
+      const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); } };
       modal.addEventListener('click', onBackdrop);
       document.addEventListener('keydown', onKey, true);
       $('confirm-close').addEventListener('click', onCancel);
@@ -2500,18 +2524,26 @@
     window.api.on('multitrack', (m) => { mt.monitor = m; renderChannels(); });
     window.api.on('track-levels', (l) => applyTrackLevels(l));
     window.api.on('multitrack-play', (p) => applyPlayback(p));
-    // Aufnahmeart von außen umgestellt (Companion): nur Umschalter und Ansicht nachziehen, ein offener
-    // Einstellungsdialog behält seine ungespeicherten Eingaben.
     window.api.on('loudness', ({ loudness }) => setLoudness(loudness));
     // Nur bis zum nächsten Programmstart; die Voreinstellung steht in den Einstellungen.
     $('chk-loudness').addEventListener('change', (e) => {
       state.loudOn = e.target.checked;
       applyLoudnessView();
     });
+    // Einstellungen von außen geändert (Companion stellt die Aufnahmeart um, Prüfung der Verschlüsselung): Umschalter
+    // und Ansicht nachziehen. Ein offener Einstellungsdialog behält ungespeicherte Eingaben im Reiter „Audio“.
     window.api.on('settings', (st) => {
+      const dialogOpen = !$('modal-settings').hidden;
+      const audioClean = !dialogOpen || !dirtyTabs().includes('audio');
       state.settings = st;
-      $('set-rec-mode').value = settingMode();
-      syncRecModeSeg();
+      if (audioClean) {
+        $('set-rec-mode').value = settingMode();
+        syncRecModeSeg();
+        if (dialogOpen && state.settingsSnap) {
+          state.settingsSnap.audio = settingsValues().audio;   // sonst stünde der Reiter als ungespeichert da
+          updateSettingsDirty();
+        }
+      }
       applyMode();
       refreshDisk();
       renderNow();
@@ -3035,7 +3067,7 @@
       el.querySelector('.when b').textContent = day ? `${WEEKDAYS[day.getDay()]} ${day.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}` : '–';
       el.querySelector('.when small').textContent = started ? `${started.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })} Uhr` : '';
       el.querySelector('.title').textContent = s.name;
-      const meta = [fmtLength(s.duration), `${s.sectionCount} Abschnitte`];
+      const meta = [fmtLength(s.duration), `${s.sectionCount} ${s.sectionCount === 1 ? 'Abschnitt' : 'Abschnitte'}`];
       if (s.artists?.length) meta.push(s.artists.join(', '));
       el.querySelector('.meta').textContent = meta.join(' · ');
       el.querySelector('.what').title = [s.name, ...(s.labels || [])].join('\n');
@@ -3092,10 +3124,17 @@
     const res = await window.api.session.recoverable();
     if (!res.ok || res.sessions.length === 0) return;
     const s = res.sessions[0];
-    toast('warn', `Eine unterbrochene Aufnahme wurde gefunden (${s.date}, ${fmt(s.duration)}). Über „Aufnahmen“ wiederherstellbar.`, 12000);
+    const when = [serviceDateText(s), fmt(s.duration)].filter(Boolean).join(', ');
+    toast('warn', `Eine unterbrochene Aufnahme wurde gefunden (${when}). Über „Aufnahmen“ wiederherstellbar.`, 12000);
   }
 
   /* --------------------------------------------------------- Einstellungen */
+
+  /** Name des gewählten Geräts (bei nicht angeschlossenem der gespeicherte, ohne Zusatz). */
+  function deviceLabel(sel) {
+    const opt = sel.selectedOptions[0];
+    return opt ? (opt.dataset.label ?? opt.textContent) : '';
+  }
 
   async function fillDeviceSelect(sel, kind, savedId, emptyText) {
     sel.innerHTML = '';
@@ -3112,9 +3151,18 @@
         sel.appendChild(opt);
       });
       if (devices.length === 0) std.textContent = emptyText;
-      // Gespeichertes Gerät nicht mehr angeschlossen: bei Systemstandard bleiben.
+      // Gespeichertes Gerät nicht angeschlossen: als Eintrag stehen lassen. Sonst stünde die Auswahl auf
+      // Systemstandard, und das nächste Speichern (auch „Verbindung prüfen“) vergäße das Gerät für immer.
       const present = devices.some((d) => d.id === savedId);
-      sel.value = present ? savedId : '';
+      if (savedId && !present) {
+        const label = (kind === 'audioinput' ? state.settings.inputDeviceLabel : state.settings.outputDeviceLabel) || 'Gewähltes Gerät';
+        const opt = document.createElement('option');
+        opt.value = savedId;
+        opt.dataset.label = label;
+        opt.textContent = `${label} (nicht angeschlossen)`;
+        sel.appendChild(opt);
+      }
+      sel.value = savedId || '';
       if (kind === 'audioinput') state.inputMissing = Boolean(savedId) && !present;
     } catch (err) {
       std.textContent = 'Zugriff auf Audiogeräte fehlgeschlagen';
@@ -3135,7 +3183,6 @@
   function renderMixer(m) {
     state.mixer = m;
     if (!m) return;
-    const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const st = $('mixer-status');
     if (!m.configured) {
       st.textContent = '● Kein Pult eingerichtet';
@@ -3309,7 +3356,6 @@
 
   function renderChannelStatus(model = channelModel()) {
     const el = $('ch-status');
-    const esc = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const armed = model.filter((m) => m.armed).length;
     const parts = [];
     const s = state.session;
@@ -3328,7 +3374,7 @@
         parts.push('Angezeigt wird eine Stereo-Aufnahme – gesichert wird wie gewohnt über den Knopf oben links.');
       }
     }
-    if (mt.playText) parts.push(mt.playText);
+    if (mt.playText) parts.push(esc(mt.playText));   // enthält den Abschnittsnamen
     if (mt.monitor?.stalled) parts.push('<span class="bad">Das Gerät liefert keine Daten (Mischpult aus?)</span>');
     if (state.mixer?.configured && state.mixer.status !== 'connected') parts.push('<span class="bad">Mischpult nicht verbunden – Namen fehlen</span>');
     if (state.diskHoursLeft != null && settingMode() === 'multitrack' && !isLive()) parts.push(`Platz für ca. ${formatHours(state.diskHoursLeft)}`);
@@ -3790,6 +3836,11 @@
       $('ct-test-result').textContent = res.ok
         ? `Verbunden als ${res.name}.`
         : res.error;
+      // Das Speichern hat die Kalenderliste geleert (Formular neu befüllt): mit der geprüften Verbindung neu laden.
+      if (res.ok) {
+        state.calendarsLoaded = true;
+        loadCalendars();
+      }
     });
     $('btn-ct-dump').addEventListener('click', async () => {
       $('ct-dump-result').textContent = 'Wird geladen …';
@@ -3850,9 +3901,9 @@
   async function saveSettings(keepOpen) {
     const patch = {
       inputDeviceId: $('set-device').value,
-      inputDeviceLabel: $('set-device').selectedOptions[0]?.textContent || '',
+      inputDeviceLabel: deviceLabel($('set-device')),
+      outputDeviceLabel: deviceLabel($('set-output')),
       outputDeviceId: $('set-output').value,
-      outputDeviceLabel: $('set-output').selectedOptions[0]?.textContent || '',
       sampleRate: Number($('set-samplerate').value),
       recordingMode: $('set-rec-mode').value,
       multitrackDevice: $('set-mt-device').value,

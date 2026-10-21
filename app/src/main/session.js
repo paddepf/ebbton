@@ -3,13 +3,12 @@
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { WavWriter, readInfo, readSlice, writeCues } = require('./wav');
+const { WavWriter, readInfo, readSlice, readFrames, writeCues } = require('./wav');
 const settings = require('./settings');
 const SectionLogic = require('../shared/sections');
 const RoleLogic = require('../shared/roles');
 const Loudness = require('../shared/loudness-curve');
 const { LoudnessMeter } = require('./loudness');
-const { readFrames } = require('./wav');
 
 const PEAK_BUCKET_MS = 50;   // Auflösung der Wellenform
 const AUTOSAVE_MS = 3000;
@@ -99,7 +98,8 @@ class Session extends EventEmitter {
     this.loudness = [];                 // Stereo: Lautheit je 100 ms (LUFS, null = Stille), siehe shared/loudness-curve.js
     this._loudCurve = new Loudness.Curve(this.loudness);
     this._loudMeter = null;             // misst während der Aufnahme
-    this._loudJob = (this._loudJob || 0) + 1;   // laufende Nachberechnung einer geladenen Aufnahme ungültig machen
+    this._loudComputing = null;         // laufende Nachberechnung einer geladenen Aufnahme ungültig machen
+    this._cueKey = null;
     this.mode = 'stereo';               // stereo | multitrack (Mehrspuraufnahme, siehe multitrack/)
     this.tracks = [];                   // Mehrspur: {channel (0-basiert), name, color (Pultfarbe 0–15), file (Dateiname im Spurordner)}
     this.trackDir = null;               // Mehrspur: Ordner mit Spuren und Session-Datei
@@ -376,6 +376,7 @@ class Session extends EventEmitter {
     this.cuts = this.cuts
       .map((c) => (c.end == null ? { ...c, end: time } : c))
       .filter((c) => c.end - c.start >= MIN_CUT);
+    this._mergeCuts();   // der eben geschlossene kann einen per Umschalt+Ziehen gesetzten überlappen
   }
 
 
@@ -785,8 +786,16 @@ class Session extends EventEmitter {
    */
   _syncCues() {
     if (this.status !== 'stopped' || this.writing || !this.wavPath) return;
+    const points = this._cuePoints();
+    const key = JSON.stringify(points);
+    if (key === this._cueKey) return;
+    if (this._writeCues(this.wavPath, points)) this._cueKey = key;
+  }
+
+  /** Abschnitte als Cue-Punkte (Frames) für die WAV. */
+  _cuePoints() {
     const rate = this.sampleRate;
-    const points = this.sections
+    return this.sections
       .filter((x) => x.start != null)
       .slice()
       .sort((a, b) => a.start - b.start)
@@ -795,14 +804,16 @@ class Session extends EventEmitter {
         length: x.end != null ? (x.end - x.start) * rate : 0,
         label: x.artist ? `${x.label} (${x.artist})` : x.label
       }));
-    const key = JSON.stringify(points);
-    if (key === this._cueKey) return;
+  }
+
+  _writeCues(file, points) {
     try {
-      if (!fs.existsSync(this.wavPath)) return;
-      writeCues(this.wavPath, points);
-      this._cueKey = key;
+      if (!fs.existsSync(file)) return false;
+      writeCues(file, points);
+      return true;
     } catch (err) {
       console.error('Cue-Marker konnten nicht in die WAV geschrieben werden:', err.message);
+      return false;
     }
   }
 
@@ -869,7 +880,6 @@ class Session extends EventEmitter {
    * (es gibt keinen Stereo-Mix).
    */
   _startLoudness(rate, channels, seconds) {
-    this._loudJob += 1;
     if (this.mode === 'multitrack') {
       this._loudMeter = null;
       this.loudness = [];
@@ -889,7 +899,7 @@ class Session extends EventEmitter {
     if (!this._loudMeter) return null;
     const samples = buffer.byteOffset % 2 === 0
       ? new Int16Array(buffer.buffer, buffer.byteOffset, frames * this.channels)
-      : new Int16Array(Buffer.from(buffer).buffer, 0, frames * this.channels);
+      : new Int16Array(Uint8Array.prototype.slice.call(buffer).buffer, 0, frames * this.channels);
     this._loudMeter.push(samples, frames);
     const steps = this._loudMeter.steps.map(Loudness.stepValue);
     this._loudMeter.steps.length = 0;
@@ -921,7 +931,8 @@ class Session extends EventEmitter {
    * messen, in Stücken von 5 s Audio, damit der Hauptprozess bedienbar bleibt. Meldet 'loudness' mit der Kurve.
    */
   async _computeLoudness() {
-    const job = ++this._loudJob;
+    const job = {};
+    this._loudComputing = job;
     const file = this.wavPath;
     try {
       const info = readInfo(file);
@@ -931,10 +942,19 @@ class Session extends EventEmitter {
         const { samples } = readFrames(file, f, chunk, info);
         meter.push(samples, samples.length / info.channels);
         await new Promise((r) => setImmediate(r));
-        if (job !== this._loudJob) return;          // inzwischen andere Aufnahme geladen oder neu begonnen
+        if (job !== this._loudComputing) return;    // inzwischen andere Aufnahme geladen oder neu begonnen
       }
-      this.loudness = meter.steps.map(Loudness.stepValue);
-      this._loudCurve = new Loudness.Curve(this.loudness);
+      this._loudComputing = null;
+      const steps = meter.steps.map(Loudness.stepValue);
+      if (this._loudMeter) {
+        // Inzwischen wird angehängt: Die Kurve ist bis zur alten Dateilänge mit Stille vorbelegt und wächst seitdem;
+        // den vorbelegten Teil durch die Messung ersetzen.
+        for (let i = 0; i < steps.length && i < this.loudness.length; i++) this.loudness[i] = steps[i];
+        this._loudCurve.reset(this.loudness);
+      } else {
+        this.loudness = steps;
+        this._loudCurve = new Loudness.Curve(this.loudness);
+      }
       this._loudInfo = null;
       this.emit('loudness', { loudness: this.loudness });
       this.save();
@@ -982,10 +1002,19 @@ class Session extends EventEmitter {
     this._closeOpen(this._restoredDuration);
     this._closeOpenCuts(this._restoredDuration);
     // Der Schreib-Thread leert seine Warteschlange und schließt die Datei; whenWritten() wartet darauf.
-    this._closing = this.writer ? this.writer.close() : null;
-    if (this._closing) {
+    const closing = this.writer ? this.writer.close() : null;
+    this._closing = closing;
+    if (closing) {
       this.writing = true;
-      this._closing.finally(() => { this.writing = false; this._syncCues(); });
+      // Wer nicht auf whenWritten wartet („Neue Aufnahme“, andere Aufnahme öffnen), soll die Marker der eben
+      // beendeten WAV nicht verhindern: Ist sie nicht mehr die angezeigte, bekommt sie den Stand vom Beenden.
+      const wavPath = this.wavPath;
+      const points = wavPath && this.mode !== 'multitrack' ? this._cuePoints() : null;
+      closing.finally(() => {
+        if (this._closing === closing) this.writing = false;   // sonst schließt gerade eine spätere Aufnahme
+        if (this.wavPath === wavPath) this._syncCues();
+        else if (points) this._writeCues(wavPath, points);
+      });
     }
     this.status = 'stopped';
     this.finalized = true;
@@ -1050,6 +1079,7 @@ class Session extends EventEmitter {
     }
     const filled = Math.round((total / this.sampleRate) * 10) / 10;
     this.gaps.push({ at: Math.round(at * 10) / 10, seconds: filled });
+    this._dirty = true;   // sonst speichert erst der 30-s-Autosave
     this._scheduleSave();
     return filled;
   }
@@ -1180,6 +1210,7 @@ class Session extends EventEmitter {
     this.sections = migrateSections(data, duration);
     this.exports = data.exports || {};
     this.cuts = (data.cuts || []).map((c) => ({ ...c, end: c.end != null ? c.end : duration })).filter((c) => c.end - c.start >= MIN_CUT);
+    this._mergeCuts();
     this._colorSeq = this.sections.reduce((m, x) => Math.max(m, (x.color ?? -1) + 1), 0);
 
     this._changed({ undoable: false });

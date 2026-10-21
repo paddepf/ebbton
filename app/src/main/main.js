@@ -72,7 +72,7 @@ const SILENT_AFTER_MS = 20000;
 /** Freier Platz auf dem Laufwerk der Aufnahmen (Stunden bezogen auf die aktuelle Abtastrate). */
 function diskInfo() {
   // Der Ordner kann noch nicht existieren: vom nächsten vorhandenen Elternordner messen.
-  const multi = settings.get('recordingMode') === 'multitrack';
+  const multi = activeMode() === 'multitrack';   // während einer Aufnahme deren Art, nicht die Einstellung
   let dir = multi ? multitrackDir() : settings.get('recordingsDir');
   while (dir && !fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
   const st = fs.statfsSync(dir);
@@ -160,6 +160,8 @@ async function startMultitrack() {
   const res = session.start({ multitrack: { writer: multitrack.writer(info), tracks, base, folder } });
   if (!res.ok) {
     await multitrack.stop().catch(() => {});
+    for (const t of tracks) { try { fs.unlinkSync(t.file); } catch { /* schon weg */ } }
+    try { fs.rmdirSync(folder); } catch { /* nicht leer oder schon weg */ }
     return res;
   }
   return { ...res, device: info.device, api: info.api, sampleRate: info.sampleRate, tracks: tracks.length };
@@ -472,6 +474,10 @@ setInterval(() => {
   if (missing >= DEFICIT_WARN_S) {
     const shown = Math.floor(missing * 2) / 2;
     if (health.deficit !== shown) { health.deficit = shown; publishHealth(); }
+  } else if (health.deficit) {
+    // Mit Stille gefüllte Aussetzer zählen als aufgenommen: Der Fehlbetrag kann wieder sinken.
+    health.deficit = null;
+    publishHealth();
   }
 }, 1000);
 
@@ -743,7 +749,10 @@ function updateTaskbar() {
 
 // Nur im Dev-Modus: Renderer-Änderungen laden das Fenster neu, Änderungen an
 // Main/Preload starten die App neu (nicht während einer laufenden Aufnahme).
+let liveReloadOn = false;
 function setupLiveReload() {
+  if (liveReloadOn) return;   // macOS: createWindow läuft nach Schließen und Wieder-Öffnen erneut
+  liveReloadOn = true;
   const srcDir = path.join(__dirname, '..');
   let timer = null;
   fs.watch(srcDir, { recursive: true }, (_evt, filename) => {
@@ -933,6 +942,7 @@ function setCompact(on) {
 }
 
 function createWindow() {
+  allowClose = false;   // macOS: Fenster neu geöffnet (App lief weiter) – beim nächsten Schließen wieder fragen
   // Kompakte Ansicht: in deren zuletzt benutzter Größe starten (sonst DENSE_DEFAULT)
   const denseStart = dense() ? settings.get('denseBounds') : null;
   win = new BrowserWindow({
@@ -955,6 +965,10 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // Die Oberfläche darf nie wegnavigieren (z. B. eine versehentlich ins Fenster gezogene Datei): Sie trägt die
+  // Audioerfassung, und ein Seitenwechsel löst kein 'render-process-gone' aus, es würde also nicht neu geladen.
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.once('ready-to-show', () => win.show());
   // Den Titel setzt der Hauptprozess (Aufnahmezustand, siehe updateTaskbar), nicht das <title> der Oberfläche.
   win.on('page-title-updated', (e) => e.preventDefault());
@@ -1035,7 +1049,8 @@ session.on('levels', (levels) => {
   net.publishLevels(overall);
 
   // Stille: lange fast kein Pegel, obwohl aufgenommen wird (z. B. Mischpult stumm).
-  const quiet = Math.max(levels.l, levels.r) < SILENT_LEVEL;
+  // Nur während der Aufnahme: In der Pause (Mehrspur meldet weiter Pegel) wäre das keine Warnung wert.
+  const quiet = session.status === 'recording' && Math.max(levels.l, levels.r) < SILENT_LEVEL;
   if (!quiet) silentSince = null;
   else if (silentSince == null) silentSince = Date.now();
   const silent = quiet && silentSince != null && Date.now() - silentSince > SILENT_AFTER_MS;
@@ -1253,21 +1268,26 @@ ipcMain.handle('settings:set', async (_e, patch) => {
         ? await settings.encryptSecret(clean.churchToolsToken)
         : '';
     }
-    // Nur bei tatsächlich geänderten Werten neu starten – sonst fliegen Companion und Dashboards bei
-    // jedem Speichern kurz raus, auch mitten in der Aufnahme.
-    const networkKeys = ['networkEnabled', 'networkPort', 'networkPassword', 'monitorPassword'];
-    const networkChanged = networkKeys.some((k) => k in clean && clean[k] !== settings.get(k));
-    if (('churchToolsUrl' in clean && clean.churchToolsUrl !== settings.get('churchToolsUrl')) || 'churchToolsToken' in clean) {
-      churchtools.resetCache();
+    // Die Oberfläche schickt beim Speichern immer alle Felder. Neu gestartet bzw. neu verbunden wird nur bei
+    // tatsächlich geänderten Werten – sonst flögen Companion und Dashboards bei jedem Speichern kurz raus, und im
+    // Mehrspur-Modus würden jedes Mal die Geräte (ASIO-Treiber) neu abgefragt, auch mitten in der Aufnahme.
+    const changed = (k) => k in clean && JSON.stringify(clean[k]) !== JSON.stringify(settings.get(k));
+    const anyChanged = (keys) => keys.some(changed);
+    if (changed('recordingMode') && isBusy()) {
+      delete clean.recordingMode;   // wie mode.set: nicht während einer Aufnahme
+      toast('warn', 'Die Aufnahmeart lässt sich während einer Aufnahme nicht umstellen.');
     }
+    const networkChanged = anyChanged(['networkEnabled', 'networkPort', 'networkPassword', 'monitorPassword']);
+    const mixerChanged = anyChanged(['mixerHost', 'recordingMode', 'multitrackSimulate']);
+    const modeChanged = changed('recordingMode');
+    const deviceChanged = anyChanged(['recordingMode', 'multitrackDevice', 'multitrackSimulate', 'multitrackArmed']);
+    if (changed('churchToolsUrl') || 'churchToolsToken' in clean) churchtools.resetCache();
     settings.save(clean);
     if (clean.recordingsDir) fs.mkdirSync(clean.recordingsDir, { recursive: true });
-    if (['mixerHost', 'recordingMode', 'multitrackSimulate'].some((k) => k in clean)) configureMixer();
-    if ('recordingMode' in clean) net.publishState(netState());
-    if (['recordingMode', 'multitrackDevice', 'multitrackSimulate', 'multitrackArmed'].some((k) => k in clean)) {
-      updateMonitor();
-      refreshDisk();
-    }
+    if (mixerChanged) configureMixer();
+    if (modeChanged) net.publishState(netState());
+    if (deviceChanged) updateMonitor();
+    refreshDisk();   // auch bei anderem Aufnahme- oder Mehrspur-Ordner
     if (networkChanged) {
       const result = settings.get('networkEnabled') ? net.restart() : (net.stop(), { ok: true });
       if (!result.ok) toast('warn', result.error);
@@ -1287,12 +1307,6 @@ ipcMain.handle('settings:chooseFolder', async (_e, { title, defaultPath } = {}) 
     defaultPath: defaultPath && fs.existsSync(defaultPath) ? defaultPath : app.getPath('documents'),
     properties: ['openDirectory', 'createDirectory']
   });
-  if (res.canceled || !res.filePaths[0]) return ok({ canceled: true });
-  return ok({ path: res.filePaths[0] });
-});
-
-ipcMain.handle('settings:chooseFile', async (_e, { title, filters }) => {
-  const res = await dialog.showOpenDialog(win, { title, filters, properties: ['openFile'] });
   if (res.canceled || !res.filePaths[0]) return ok({ canceled: true });
   return ok({ path: res.filePaths[0] });
 });
@@ -1825,10 +1839,6 @@ ipcMain.handle('session:state', () => ok({ state: session.snapshot(), peaks: ses
 /* --- Netzwerk & Updates --- */
 
 ipcMain.handle('net:status', () => ok(net.statusInfo()));
-ipcMain.handle('net:restart', () => {
-  const result = settings.get('networkEnabled') ? net.restart() : (net.stop(), { ok: true });
-  return result.ok ? ok(net.statusInfo()) : fail(result.error);
-});
 
 ipcMain.handle('update:check', () => updater.check({ manual: true }));
 ipcMain.handle('update:download', () => {
@@ -1840,7 +1850,6 @@ ipcMain.handle('update:install', () => {
   return result.ok ? ok() : fail(result.error);
 });
 ipcMain.handle('update:openPage', () => { shell.openExternal(updater.status().releasesUrl); return ok(); });
-ipcMain.handle('update:status', () => ok(updater.status()));
 
 /* --------------------------------------------------------------- App-Start */
 
@@ -1848,8 +1857,21 @@ const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) {
   app.quit();
 } else {
+  /** macOS: Das Fenster wurde geschlossen, die App lief weiter – neu öffnen. */
+  const reopenWindow = () => {
+    if (BrowserWindow.getAllWindows().length > 0) return;
+    createWindow();
+    // Beim Schließen des Fensters wurde die Netzwerkschnittstelle gestoppt.
+    if (settings.get('networkEnabled') && settings.get('networkPassword') && !net.statusInfo().running) {
+      const result = net.start();
+      if (!result.ok) console.warn('Netzwerkschnittstelle:', result.error);
+    }
+  };
+
   app.on('second-instance', () => {
-    if (win) {
+    if (!win) {
+      if (app.isReady()) reopenWindow();
+    } else {
       if (win.isMinimized()) win.restore();
       win.focus();
     }
@@ -1886,15 +1908,7 @@ if (!singleInstance) {
       if (!result.ok) console.warn('Netzwerkschnittstelle:', result.error);
     }
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length > 0) return;
-      createWindow();
-      // Beim Schließen des Fensters wurde die Netzwerkschnittstelle gestoppt (macOS: App läuft weiter).
-      if (settings.get('networkEnabled') && settings.get('networkPassword') && !net.statusInfo().running) {
-        const result = net.start();
-        if (!result.ok) console.warn('Netzwerkschnittstelle:', result.error);
-      }
-    });
+    app.on('activate', reopenWindow);
   });
 
   app.on('window-all-closed', () => {

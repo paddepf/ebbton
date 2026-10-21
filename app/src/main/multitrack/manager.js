@@ -12,6 +12,11 @@ const path = require('path');
 const { EventEmitter } = require('events');
 
 const TIMEOUT_MS = 15000;
+// Starten (ASIO-Treiber öffnen) und Beenden (32 Spuren zu Ende schreiben, fdatasync) dürfen länger dauern: Ein
+// zu früh abgebrochenes `start` hinterließe eine verwaiste Aufnahme im Prozess, ein abgebrochenes `stop` ein
+// „läuft noch“ im Hauptprozess.
+const START_TIMEOUT_MS = 60000;
+const STOP_TIMEOUT_MS = 300000;
 
 class MultitrackManager extends EventEmitter {
   /** @param {{fork?: Function}} [o] fork: Ersatz für `utilityProcess.fork` (Tests) */
@@ -58,14 +63,16 @@ class MultitrackManager extends EventEmitter {
     else p.reject(new Error(msg.error));
   }
 
-  _call(cmd, args) {
+  _call(cmd, args, timeoutMs = TIMEOUT_MS) {
     const child = this._ensure();
     const id = this.nextId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`Mehrspur-Prozess antwortet nicht (${cmd}).`));
-      }, TIMEOUT_MS);
+        const err = new Error(`Mehrspur-Prozess antwortet nicht (${cmd}).`);
+        err.timeout = true;
+        reject(err);
+      }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       child.postMessage({ id, cmd, args });
     });
@@ -76,7 +83,14 @@ class MultitrackManager extends EventEmitter {
   }
 
   async start(opts) {
-    const result = await this._call('start', opts);
+    let result;
+    try {
+      result = await this._call('start', opts, START_TIMEOUT_MS);
+    } catch (err) {
+      // Kommt die Antwort doch noch, liefe die Aufnahme im Prozess ohne Session weiter: hinterher beenden.
+      if (err.timeout) this._call('stop', undefined, STOP_TIMEOUT_MS).catch(() => {});
+      throw err;
+    }
     this.recording = true;
     return result;
   }
@@ -118,7 +132,7 @@ class MultitrackManager extends EventEmitter {
 
   async stop() {
     if (!this.child) return null;
-    const result = await this._call('stop');
+    const result = await this._call('stop', undefined, STOP_TIMEOUT_MS);
     this.recording = false;
     return result;
   }
@@ -189,7 +203,6 @@ class TrackWriterProxy extends EventEmitter {
     const detach = () => this._detach();
     this._closing = this.manager.stop().then((res) => {
       if (res) this.durationSeconds = res.seconds;
-      this.result = res;
       detach();
       return res;
     }, (err) => {

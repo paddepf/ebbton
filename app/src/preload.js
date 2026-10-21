@@ -19,8 +19,7 @@ contextBridge.exposeInMainWorld('api', {
   settings: {
     get: () => invoke('settings:get'),
     set: (patch) => invoke('settings:set', patch),
-    chooseFolder: (title, defaultPath) => invoke('settings:chooseFolder', { title, defaultPath }),
-    chooseFile: (opts) => invoke('settings:chooseFile', opts)
+    chooseFolder: (title, defaultPath) => invoke('settings:chooseFolder', { title, defaultPath })
   },
 
   churchtools: {
@@ -37,7 +36,6 @@ contextBridge.exposeInMainWorld('api', {
     list: () => invoke('session:list'),
     open: (path) => invoke('session:open', { path }),
     recoverable: () => invoke('session:recoverable'),
-    reset: () => invoke('session:new'),
     prepareNext: () => invoke('session:new', { keepPlan: true })
   },
 
@@ -47,9 +45,9 @@ contextBridge.exposeInMainWorld('api', {
     pause: () => invoke('rec:pause'),
     resume: () => invoke('rec:resume'),
     stop: () => invoke('rec:stop'),
-    /** Audioblock (Int16 interleaved) an den Hauptprozess übergeben. */
     /** Ausschnitt der (laufenden) Aufnahme zum Mithören lesen. */
     readAudio: (start, seconds) => invoke('audio:read', { start, seconds }),
+    /** Audioblock (Int16 interleaved) an den Hauptprozess übergeben. */
     chunk: (arrayBuffer) => ipcRenderer.send('audio:chunk', arrayBuffer)
   },
 
@@ -82,11 +80,11 @@ contextBridge.exposeInMainWorld('api', {
     toggle: (params) => invoke('section:toggle', params),
     /** Offenen Ablaufpunkt beginnen (time = null: jetzt). */
     start: (id, time) => invoke('section:start', { id, time }),
-    /** Ablaufpunkt auf die Zeitachse legen (Drag & Drop): füllt eine Lücke oder beginnt an der Stelle. */
     /** Neuen offenen Ablaufpunkt anlegen. */
     add: (params) => invoke('section:add', params),
     /** Offenen Ablaufpunkt vor einen anderen schieben (beforeId = null: ans Ende). */
     reorder: (id, beforeId) => invoke('section:reorder', { id, beforeId }),
+    /** Ablaufpunkt auf die Zeitachse legen (Drag & Drop): füllt eine Lücke oder beginnt an der Stelle. */
     place: (id, time) => invoke('section:place', { id, time }),
     /** Laufenden Abschnitt beenden und nächsten Ablaufpunkt beginnen. */
     next: (time) => invoke('section:next', { time }),
@@ -125,16 +123,14 @@ contextBridge.exposeInMainWorld('api', {
   exportPreviewName: (pattern) => invoke('export:previewName', { pattern }),
 
   net: {
-    status: () => invoke('net:status'),
-    restart: () => invoke('net:restart')
+    status: () => invoke('net:status')
   },
 
   update: {
     check: () => invoke('update:check'),
     download: () => invoke('update:download'),
     install: () => invoke('update:install'),
-    openPage: () => invoke('update:openPage'),
-    status: () => invoke('update:status')
+    openPage: () => invoke('update:openPage')
   },
 
   on: (channel, handler) => {

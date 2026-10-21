@@ -5,7 +5,7 @@
   "name": "ebbton",
   "shortname": "Ebbton",
   "description": "Steuert Ebbton: Aufnahme, Abschnitte, Schnitte und Ablaufplan",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "license": "MIT",
   "repository": "git+https://github.com/paddepf/ebbton.git",
   "bugs": "https://github.com/paddepf/ebbton/issues",

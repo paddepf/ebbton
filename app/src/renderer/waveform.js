@@ -94,6 +94,7 @@
     xToTime(x) { return this.scrollT + x / this.pxPerSec; }
 
     clampScroll() {
+      if (!Number.isFinite(this.scrollT)) this.scrollT = 0;
       const max = Math.max(0, this.duration - this.viewSeconds * 0.98);
       this.scrollT = Math.min(Math.max(0, this.scrollT), Math.max(0, max));
     }
@@ -107,6 +108,11 @@
     }
 
     setZoom(pxPerSec, anchorTime) {
+      if (!this.width) {
+        // Ohne Breite gibt es keinen sichtbaren Ausschnitt (Division durch 0 → scrollT NaN)
+        this.pxPerSec = Math.min(300, Math.max(0.05, pxPerSec));
+        return;
+      }
       const anchor = anchorTime == null ? this.scrollT + this.viewSeconds / 2 : anchorTime;
       const rel = (anchor - this.scrollT) / this.viewSeconds;
       this.pxPerSec = Math.min(300, Math.max(0.05, pxPerSec));
@@ -735,6 +741,7 @@
       const cv = this.canvas;
 
       cv.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;   // Rechts-/Mittelklick setzt keine Marke und zieht nichts
         const { x, y } = this._pos(e);
         const handle = this._handleAt(x, y);
         const cutEdge = !(handle && y <= RULER_H + FLAG_H) ? this._cutEdgeAt(x, y) : null;
@@ -894,8 +901,16 @@
         this.draw();
       });
 
+      // Beim Ziehen eines Ablaufpunkts kommt kein pointerleave: die Hilfslinie sonst stehen lassen.
+      cv.addEventListener('dragleave', () => {
+        this.hoverTime = null;
+        this.draw();
+      });
+
       cv.addEventListener('drop', (e) => {
         e.preventDefault();
+        this.hoverTime = null;
+        this.draw();
         const id = e.dataTransfer.getData('text/marker-id');
         if (!id) return;
         const t = Math.max(0, Math.min(this.duration, this.xToTime(this._pos(e).x)));
@@ -1046,7 +1061,7 @@
         wave.draw();
       };
       cv.addEventListener('pointerdown', (e) => {
-        if (!(this.wave.duration > 0)) return;
+        if (e.button !== 0 || !(this.wave.duration > 0)) return;
         const t = timeAt(e);
         const wave = this.wave;
         const inside = t >= wave.scrollT && t <= wave.scrollT + wave.viewSeconds;

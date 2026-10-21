@@ -155,7 +155,7 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   ursprünglichen Namen, damit erneutes Laden keine Doppelten erzeugt und der Text nicht zweimal angehängt wird; Regel
   `RoleLogic.takesEventInfo`). Das Etikett ist Abschnittsname, Dateiname-`{abschnitt}` und ID3-Titel.
   Gerade Anführungszeichen aus ChurchTools (Titel der Ablaufpunkte und Infotext) setzt `typoQuotes` typografisch
-  („…“, Apostroph ’), sonst stünden Schreibmaschinenzeichen in Namen, Dateinamen und ID3-Titeln.
+  („…“, ‚…‘, Apostroph ’), sonst stünden Schreibmaschinenzeichen in Namen, Dateinamen und ID3-Titeln.
   **Welches ChurchTools-Feld den Infotext trägt, ist nicht gegen eine echte Instanz geprüft** (mehrere Feldnamen
   werden probiert); bei Abweichungen die echte Antwort von `GET /api/events/{id}` ansehen und `eventInfoText` anpassen.
 
@@ -289,8 +289,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   `LIST/adtl` mit `labl` (Name, bei Interpret „Name (Interpret)“, Latin-1); typografische Anführungszeichen/Striche werden vorher zu ASCII (`toLatin1`), sonst entstünden Steuerzeichen und `ltxt` (Region mit Länge). Die Session-Datei
   bleibt maßgeblich. `readInfo` erkennt nachgestellte `cue `/`LIST`-Chunks und nimmt dann die Datenlänge aus dem Kopf
   statt der Dateigröße (sonst zählten sie als Audio). `WavWriter` mit `append` schneidet sie ab (`ftruncate`), beim
-  erneuten Beenden kommen sie neu. RF64-Dateien (> 4 GB) bekommen keine Marker. Bei Aufnahmen, die nie beendet
-  wurden (Absturz), gibt es keine.
+  erneuten Beenden kommen sie neu. RF64-Dateien (> 4 GB) bekommen keine Marker. Unterbrochene Aufnahmen (Absturz)
+  bekommen sie, sobald sie geöffnet werden (`loadFromFile` speichert sie als wiederhergestellt). Wird vor dem Ende des
+  Schreibens schon etwas anderes geladen oder „Neue Aufnahme“ gewählt, schreibt `stop()` die Marker mit dem Stand vom
+  Beenden in die alte Datei (vorher fehlten sie dann).
 - Beim Beenden gibt die Erfassung den angefangenen Block ab (`capture.flush()` vor `record.stop`).
 - **Beenden-Rückfrage asynchron** (`confirmAndFinishRecording`, `guardClose`): blockiert den Hauptprozess nicht.
 - **Fernbefehle mit echter Antwort:** `record.start/stop/toggle` warten auf `recording-started/-stopped`
@@ -926,6 +928,36 @@ dran?“; je Phase genau eine Hauptaktion, der Aufbau bleibt gleich, nur die Bet
 - Gemessen (echte App per DevTools-Protokoll, Zustände auch per `data-phase` nachgestellt): kein Überlauf, Timer fest bei
   1360×880, 1024×680, kompakt 960×640 und 760×520, Stereo und Mehrspur; Mini 360×168 und 320×164 in allen vier
   Zuständen; hell und dunkel. Echte Abläufe: Start, N, Beenden halten (kurz → Hinweis), Entfernen + Rückgängig.
+
+### Durchsicht des ganzen Codes (2026-10-21)
+Funde behoben, die bei Verhalten oder Schnittstelle zählen:
+- **Oberfläche bleibt, wo sie ist:** `will-navigate` wird verhindert, `window.open` abgelehnt. Eine versehentlich ins
+  Fenster gezogene Datei hätte die Oberfläche (und damit die Audioerfassung) entladen, ohne `render-process-gone`.
+- **Wächter und gedrosselter Zustand:** `state` kommt bis 100 ms nach der Antwort auf `rec:start`/`rec:stop`. Die
+  Oberfläche setzt deshalb beim Start auch `mode`, beim Beenden `status = 'stopped'` sofort lokal; sonst verband der
+  Wächter im Zwischenraum den Eingang neu (Fehlalarm im Protokoll bzw. Stereo-Erfassung bei Mehrspurstart).
+- **`settings:set` wirkt nur bei geänderten Werten** (Vergleich per JSON): Die Oberfläche schickt immer alle Felder,
+  vorher fragte jedes Speichern im Mehrspur-Modus die Geräte (ASIO-Treiber) neu ab. `recordingMode` wird während einer
+  Aufnahme abgelehnt (wie `mode.set`). Speicherwarnung rechnet mit der Art der laufenden Aufnahme (`activeMode`).
+- **Health:** Der Fehlbetrags-Balken geht wieder weg, wenn der Fehlbetrag unter 2 s sinkt (gefüllte Lücke); Stille
+  (`silent`) zählt nur bei `recording`, nicht in der Pause.
+- **macOS:** `allowClose` wird in `createWindow` zurückgesetzt (nach Schließen und Wieder-Öffnen fragte das Fenster
+  sonst nie mehr); `second-instance` ohne Fenster öffnet eines (`reopenWindow`, wie `activate`).
+- **Mehrspur:** `start` 60 s, `stop` 5 min Zeitgrenze (vorher 15 s für alles; nach einem `start`-Abbruch wird `stop`
+  nachgeschickt). `engine.open` ohne Rate vergleicht mit der bevorzugten Rate des Geräts (vorher blieb die Rate einer
+  abgespielten 44,1-kHz-Aufnahme für die nächste neue hängen). Nach `_reopen` wird die Ausgabe neu befüllt.
+- **Netzwerk:** `maxPayload` 64 KiB (vorher 100 MiB vor jeder Anmeldung); Fehlversuche verfallen nach 10 min;
+  Mitlesende bekommen `health.writeMessage` nicht. Statusseite: getrennt → blass, Timer steht, Pegel fällt auf null,
+  Fehlbetrag als Warnung.
+- **Gerätewahl:** Ein nicht angeschlossenes Ein-/Ausgabegerät bleibt in der Auswahl („… (nicht angeschlossen)“);
+  vorher stand dort Systemstandard, und das nächste Speichern vergaß das Gerät. `outputDeviceLabel` wird dafür gelesen.
+- **Pakete:** Alles aktuell (Electron 45.0.0, audify 1.10.1, ws 8.22, electron-updater 6.8, electron-builder 26.15).
+  `npm audit` meldet `tar`/`cmake-js` über audify: Das sind Bauwerkzeuge von audify (nur zum Übersetzen aus dem
+  Quelltext), die zur Laufzeit nie laufen; electron-builder packt sie trotzdem mit (etwa 5 MB). Bewusst nicht per
+  `build.files` ausgeschlossen: Die Liste der transitiven Pakete müsste von Hand gepflegt werden, und ein Fehler fiele
+  erst in der installierten App auf. Companion-Modul 2.2.1: Absturz beim Trennen während des Verbindungsaufbaus
+  behoben (`close()` meldet in `ws` danach noch einen Fehler, für den nach `removeAllListeners` niemand mehr zuhörte);
+  Bauwerkzeug 3.2.0, dazu eine `package-lock.json`.
 
 ### Entfernt: Mitschrift
 Die lokale Transkription (whisper.cpp, Mitschrift-Panel, Einstellungen) wurde
