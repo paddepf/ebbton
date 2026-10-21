@@ -325,13 +325,26 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
 - Folgen: macOS ab 13 (`LSMinimumSystemVersion`), Bauen braucht Node ≥ 22.12 (CI: Node 24, `checkout`/`setup-node` v7).
   Ab Electron 43 öffnet `dialog.showOpenDialog` ohne `defaultPath` den Downloads-Ordner, deshalb gibt
   `settings:chooseFolder` den aktuellen Ordner mit (sonst Dokumente).
-- **Vor Electron 45/46:** `safeStorage.encryptString/decryptString/isEncryptionAvailable` sind ab 45 veraltet und
-  entfallen in 46. Dann `settings.js` auf `encryptStringAsync`/`decryptStringAsync` umbauen (entschlüsselt alte
-  Werte weiter, bei `shouldReEncrypt` neu verschlüsseln), sonst ist der ChurchTools-Token weg.
-- Geprüft nach dem Update: Tests auch mit Electrons Node (`ELECTRON_RUN_AS_NODE=1 electron --test test/*.test.js`),
+- **Electron 45** (2026-10-21, am Erscheinungstag von 45.0.0; Node 24.22, Chromium 156): `safeStorage` läuft jetzt
+  asynchron (`isAsyncEncryptionAvailable`, `encryptStringAsync`, `decryptStringAsync`; die synchronen Aufrufe entfallen
+  in 46). `settings.churchToolsToken()` und `encryptSecret`/`decryptSecret` geben Versprechen zurück; meldet
+  `decryptStringAsync` `shouldReEncrypt`, wird der Token neu verschlüsselt gespeichert. Mit den alten Aufrufen
+  verschlüsselte Token liest die neue Version weiter (geprüft am Mac mit dem echten Token). Die erste Prüfung der
+  Verschlüsselung dauerte am Mac knapp 6 s (Schlüsselbund); `forRenderer` meldet deshalb den zuletzt bekannten Stand und
+  der Hauptprozess schickt `settings` nach, sobald die Prüfung fertig ist (sonst stünde in den Einstellungen
+  „unverschlüsselt“). Die übrigen Änderungen in 45 treffen Ebbton nicht: Preload läuft ohne Sandbox, Dateideskriptoren
+  gibt es nur für Dateien außerhalb von `app.asar`.
+- **Vor Electron 46:** `utilityProcess` `child.kill()` beendet nicht mehr hart, sondern schickt nur `SIGTERM`
+  (`MultitrackManager.dispose`); prüfen, ob der Mehrspur-Prozess darauf endet. `unload` läuft auf http(s)-Seiten nicht
+  mehr (die Statusseite nutzt es nicht).
+- Geprüft nach dem Update auf 44: Tests auch mit Electrons Node (`ELECTRON_RUN_AS_NODE=1 electron --test test/*.test.js`),
   echte Aufnahme mit Abschnitten, Schnitt, Pause, Anhängen, Mithören, Mini-Fenster, MP3-Export mit ID3, Cue-Marker,
-  ChurchTools-Token, gepackte Mac-App inkl. Schreib-Thread aus `app.asar`.
-- **Tests:** `npm test` (`node --test`, Ordner `app/test/`, `helpers.js` ersetzt `./settings`). CI:
+  ChurchTools-Token, gepackte Mac-App inkl. Schreib-Thread aus `app.asar`. Nach dem Update auf 45 (Mac): Tests mit
+  Node und Electrons Node, Aufnahme mit Abschnitten (N), Pause, Beenden (halten), MP3-Export mit ID3, Cue-Marker,
+  ChurchTools-Token, gepackte App (Schreib-Thread und Export-Threads aus `app.asar`, Mehrspur-Technik-Test mit
+  Simulation). **Am Kirchen-PC noch nicht geprüft.**
+- **Tests:** `npm test` (`node --test`, Ordner `app/test/`, `helpers.js` ersetzt `./settings`; `settings.test.js` lädt
+  dagegen die echte `settings.js` mit nachgebautem `electron`, also `app.getPath` und `safeStorage`). CI:
   `.github/workflows/test.yml` auf Windows und macOS. Neue Logik dort mit Tests absichern.
 
 ### Rückgängig, Schnitte, Vorlagen, Health

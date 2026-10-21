@@ -1245,12 +1245,12 @@ ipcMain.handle('disk:free', () => {
 
 ipcMain.handle('settings:get', () => ok({ settings: settings.forRenderer() }));
 
-ipcMain.handle('settings:set', (_e, patch) => {
+ipcMain.handle('settings:set', async (_e, patch) => {
   try {
     const clean = { ...patch };
     if (Object.prototype.hasOwnProperty.call(clean, 'churchToolsToken')) {
       clean.churchToolsToken = clean.churchToolsToken
-        ? settings.encryptSecret(clean.churchToolsToken)
+        ? await settings.encryptSecret(clean.churchToolsToken)
         : '';
     }
     // Nur bei tatsächlich geänderten Werten neu starten – sonst fliegen Companion und Dashboards bei
@@ -1857,6 +1857,9 @@ if (!singleInstance) {
 
   app.whenReady().then(async () => {
     settings.load();
+    // Ob der Token verschlüsselt werden kann, steht erst nach einigen Sekunden fest (Mac: knapp 6 s, Schlüsselbund);
+    // die Oberfläche hat ihre Einstellungen dann schon und bekommt sie deshalb noch einmal.
+    settings.initEncryption().then(() => send('settings', settings.forRenderer()));
     setupApplicationMenu();
     createWindow();
     logPowerEvents();

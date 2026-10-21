@@ -28,7 +28,7 @@ function baseUrl() {
 }
 
 async function requestRaw(pathname, params) {
-  const token = settings.churchToolsToken();
+  const token = await settings.churchToolsToken();
   if (!token) throw new Error('Es ist kein ChurchTools-Token hinterlegt.');
 
   const url = new URL(baseUrl() + pathname);

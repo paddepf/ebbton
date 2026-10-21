@@ -11,7 +11,7 @@ speichert einen ausgewählten Abschnitt – zum Beispiel die Predigt – als MP3
 
 ## Installation für die Entwicklung
 
-Voraussetzung: Node.js 22.12 oder neuer (empfohlen 24 LTS), weil Electron 44 und
+Voraussetzung: Node.js 22.12 oder neuer (empfohlen 24 LTS), weil Electron 45 und
 electron-builder 26 das zum Installieren und Bauen verlangen.
 
 ```bash
@@ -470,7 +470,7 @@ beim Herunterladen auf den Aufnahmerechnern.
 
 ## Besonderheiten unter macOS
 
-Die App läuft auf macOS 13 (Ventura) und neuer (Vorgabe von Electron 44), sowohl auf Intel als auch auf Apple
+Die App läuft auf macOS 13 (Ventura) und neuer (Vorgabe von Electron 45), sowohl auf Intel als auch auf Apple
 Silicon. Ein paar Dinge unterscheiden sich:
 
 - **Mikrofonfreigabe.** Beim ersten Start fragt macOS nach dem Zugriff auf den
