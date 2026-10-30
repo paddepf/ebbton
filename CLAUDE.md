@@ -311,7 +311,10 @@ Stand der Funktionen und das Warum dahinter. Beim Weiterarbeiten beachten.
   Pixeldichte; typografische Anführungszeichen „…“ überall.
 - Updater auf dem Mac ohne Zertifikat: Status `manual` mit Hinweis statt Fehler. Release-Workflow: Tag-Prüfung,
   Tests, Entwurf, beide Builds, dann Freigabe; Mac ohne Zertifikat ad hoc signiert (`-c.mac.identity=-`).
-  App-Icon `app/build/icon.png` (1024 px, wird von electron-builder umgerechnet).
+  App-Icons: `app/build/icon.png` (1024 px, Mac und Linux, wird von electron-builder umgerechnet) und
+  `app/build/icon.ico` (Windows, `build.win.icon`). Beide kommen aus der ebbp-Marke auf dem Server
+  (`/srv/marke/ausgabe/ebbton/`: `desktop-icon-1024.png`, `desktop-icon.ico`, per `scp` von `10.1.1.73`); dort neu
+  erzeugen statt die Dateien hier von Hand zu ändern. Ein neues Icon erscheint erst mit dem nächsten Release.
   Leere Secrets kommen als leere Umgebungsvariablen an: `CSC_LINK=""` hält electron-builder für einen Dateipfad
   („app not a file“), deshalb `unset CSC_LINK CSC_KEY_PASSWORD` im Zweig ohne Zertifikat.
 
