@@ -910,7 +910,8 @@ dran?“; je Phase genau eine Hauptaktion, der Aufbau bleibt gleich, nur die Bet
   **inline** in `index.html` (Haus und „ebb“ nutzen `currentColor`, „ton“ und Mikrofon die Klassen
   `.marke-akzent-strich`/`-flaeche`; per `<img>` griffe das nicht). Quelle: `/srv/marke/ausgabe/ebbton/logo-inline.svg`
   auf dem Server, dort neu erzeugen und wieder einsetzen statt hier von Hand zu ändern. Kennfarbe `--marke-akzent`
-  (hell `#7A5536`, dunkel die Tönung `#D2A57E`) gilt **nur fürs Logo**, alle übrigen Farben der App bleiben. 26 px hoch,
+  (hell `#7A5536`, dunkel die Tönung `#D2A57E`) gilt **nur fürs Logo**, alle übrigen Farben der App bleiben. 34 px hoch
+  (unter 1180 px 31, kompakt 29; 26 war dem Nutzer zu klein),
   im Mini-Fenster aus. Würde es den Namen kürzen, blendet `fitLogo` es aus (`body.logo-aus`): mit Logo messen
   (`scrollWidth > clientWidth`), synchron, also ohne Flackern; Auslöser `ResizeObserver` auf `.topbar` und `.service`,
   `applyDense` und geänderter Name/Datum in `render` (in der kompakten Ansicht ist `.service` fest breit). Gemessen

@@ -1622,7 +1622,9 @@ body.dense .undo-group .icon-btn svg { width: 15px; height: 15px; }
 :root { --marke-akzent: #D2A57E; }                 /* dunkles Schema: Tönung */
 :root[data-theme="light"] { --marke-akzent: #7A5536; } /* helles Schema: Kennfarbe */
 .service { display: flex; align-items: center; gap: 14px; }
-.marke-logo { height: 26px; width: auto; flex-shrink: 0; color: var(--text); }
+.marke-logo { height: 34px; width: auto; flex-shrink: 0; color: var(--text); }
+@media (max-width: 1180px) { .marke-logo { height: 31px; } }
+body.dense .marke-logo { height: 29px; }
 .marke-akzent-strich { stroke: var(--marke-akzent); }
 .marke-akzent-flaeche { fill: var(--marke-akzent); }
 body.dense .service { gap: 10px; }
