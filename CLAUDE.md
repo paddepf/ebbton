@@ -906,6 +906,16 @@ dran?“; je Phase genau eine Hauptaktion, der Aufbau bleibt gleich, nur die Bet
   Hell/Dunkel – Symbole ohne Rahmen, erst beim Darüberfahren hinterlegt. **Hell/Dunkel bleibt bewusst in der Kopfleiste**
   (Wunsch des Nutzers). Kopfleiste flacher (10 px statt 14 px Innenabstand). Ohne Gottesdienst heißt das Feld
   „Gottesdienst wählen …“ und ist gestrichelt in Akzentfarbe (`.service-name.unset`).
+- **Logo in der Kopfleiste** (2026-10-30): Ebbton-Logo der ebbp-Marke links in `.service` vor dem Gottesdienst-Knopf,
+  **inline** in `index.html` (Haus und „ebb“ nutzen `currentColor`, „ton“ und Mikrofon die Klassen
+  `.marke-akzent-strich`/`-flaeche`; per `<img>` griffe das nicht). Quelle: `/srv/marke/ausgabe/ebbton/logo-inline.svg`
+  auf dem Server, dort neu erzeugen und wieder einsetzen statt hier von Hand zu ändern. Kennfarbe `--marke-akzent`
+  (hell `#7A5536`, dunkel die Tönung `#D2A57E`) gilt **nur fürs Logo**, alle übrigen Farben der App bleiben. 26 px hoch,
+  im Mini-Fenster aus. Würde es den Namen kürzen, blendet `fitLogo` es aus (`body.logo-aus`): mit Logo messen
+  (`scrollWidth > clientWidth`), synchron, also ohne Flackern; Auslöser `ResizeObserver` auf `.topbar` und `.service`,
+  `applyDense` und geänderter Name/Datum in `render` (in der kompakten Ansicht ist `.service` fest breit). Gemessen
+  groß 1360/1180/1024 und kompakt 1024/960/760 mit kurzem und langem Namen: kein Überlauf, Name nie wegen des Logos
+  gekürzt; hell, dunkel und Mini (320×164) angesehen.
 - **Einstellungen (überarbeitet):** Zwischenüberschriften statt Kästen im Kasten, Feldnamen 15 px, Hinweise 13 px
   (vorher 13/11 px, deutlich kleiner als die Hauptansicht). Knöpfe in passender Breite (`justify-self: start`), keine über
   die volle Breite gezogenen mehr.

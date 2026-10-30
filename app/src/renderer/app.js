@@ -100,6 +100,10 @@
     state.settings = cfg.settings;
     state.sampleRate = state.settings.sampleRate || 48000;
     applyTheme(state.settings.theme);
+    // Kopfleiste (Fenstergröße) und Gottesdienst-Bereich (Name, Phase, Schild) beobachten.
+    const logoFit = new ResizeObserver(() => fitLogo());
+    logoFit.observe(document.querySelector('.topbar'));
+    logoFit.observe(document.querySelector('.service'));
 
     wave = new window.Waveform($('wave'), {
       colors: readColors(),
@@ -305,6 +309,15 @@
     return d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  /** Das Logo weicht, sobald es den Gottesdienstnamen abschneiden würde (schmale Fenster, lange Namen):
+   *  mit Logo messen, bei gekürztem Namen ausblenden. Synchron, also ohne sichtbares Flackern. */
+  function fitLogo() {
+    const body = document.body;
+    const name = $('service-name');
+    body.classList.remove('logo-aus');
+    if (name.scrollWidth > name.clientWidth + 1) body.classList.add('logo-aus');
+  }
+
   /** Kurzes Einblenden des Bereichs „Jetzt“, wenn die Phase wechselt (Start, Beenden, Neue Aufnahme). */
   function fadeNowPanel() {
     const p = $('panel-now');
@@ -334,9 +347,13 @@
     document.querySelectorAll('#phase-steps li').forEach((li) => li.classList.toggle('on', li.dataset.step === phase));
     if (prevPhase && prevPhase !== phase) fadeNowPanel();
     applyMode();
-    $('service-name').textContent = session.service?.name || 'Gottesdienst wählen …';
+    const serviceName = session.service?.name || 'Gottesdienst wählen …';
+    const serviceDate = serviceDateText(session.service);
+    const serviceChanged = $('service-name').textContent !== serviceName || $('service-date').textContent !== serviceDate;
+    $('service-name').textContent = serviceName;
     $('btn-service').classList.toggle('unset', !session.service?.name);
-    $('service-date').textContent = serviceDateText(session.service);
+    $('service-date').textContent = serviceDate;
+    if (serviceChanged) fitLogo();   // in der kompakten Ansicht ist .service fest breit, der ResizeObserver merkt das nicht
     {
       // Herkunft des Ablaufplans (agendaOrigin; bei alten Sessions aus den Quellen der Punkte abgeleitet) und
       // was sonst noch aus ChurchTools stammt (Termin, Dienstplanung, Infotext).
@@ -2137,6 +2154,7 @@
   function applyDense() {
     document.body.classList.toggle('dense', Boolean(state.dense) && !state.compact);
     if (wave) wave.resize();
+    fitLogo();
     // Größe „A A“ und Mini-Symbol
     $('btn-view-large').setAttribute('aria-pressed', String(!state.compact && !state.dense));
     $('btn-dense').setAttribute('aria-pressed', String(!state.compact && Boolean(state.dense)));

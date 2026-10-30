@@ -1615,3 +1615,16 @@ body.compact .top-text svg { display: none; }
 .undo-group .icon-btn svg { width: 18px; height: 18px; }
 body.dense .undo-group .icon-btn { width: 26px; height: 26px; }
 body.dense .undo-group .icon-btn svg { width: 15px; height: 15px; }
+
+/* ebbp-Marke (Quelle: /srv/marke/ausgabe/ebbton auf dem Server, dort neu erzeugen). Die Kennfarbe gilt nur fürs
+   Logo; alle übrigen Farben der App bleiben. Haus und „ebb“ in Textfarbe (currentColor), „ton“ und Mikrofon in der
+   Akzentfarbe. Würde das Logo den Gottesdienstnamen abschneiden, blendet es `fitLogo` aus (`body.logo-aus`). */
+:root { --marke-akzent: #D2A57E; }                 /* dunkles Schema: Tönung */
+:root[data-theme="light"] { --marke-akzent: #7A5536; } /* helles Schema: Kennfarbe */
+.service { display: flex; align-items: center; gap: 14px; }
+.marke-logo { height: 26px; width: auto; flex-shrink: 0; color: var(--text); }
+.marke-akzent-strich { stroke: var(--marke-akzent); }
+.marke-akzent-flaeche { fill: var(--marke-akzent); }
+body.dense .service { gap: 10px; }
+body.compact .marke-logo,
+body.logo-aus .marke-logo { display: none; }

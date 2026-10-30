@@ -276,6 +276,10 @@ der Kopfleiste steht der **freie Speicherplatz** und wie viele Aufnahmestunden d
 sind; unter 3 Stunden wird die Anzeige orange, unter 30 Minuten rot (dann auch mit
 Meldung während der Aufnahme).
 
+Links in der Kopfleiste steht das **Ebbton-Logo** (ebbp-Marke). Würde es den
+Gottesdienstnamen abschneiden (schmales Fenster, langer Name), wird es ausgeblendet;
+im Mini-Fenster fehlt es immer.
+
 ### Tastaturkürzel
 
 | Taste | Wirkung |
